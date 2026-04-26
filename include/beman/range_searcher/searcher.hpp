@@ -86,10 +86,10 @@ class default_searcher {
                                Proj                       proj = {})
         : pat_first_(pat_first), pat_last_(pat_last), pred_(std::move(pred)), proj_(std::move(proj)) {}
     template <typename R2>
-        requires std::same_as<std::decay_t<R2>, R>
+        requires std::same_as<std::remove_reference_t<R2>, R>
     constexpr explicit default_searcher(R2&& r) : default_searcher(std::ranges::begin(r), std::ranges::end(r)) {}
     template <typename R2>
-        requires std::same_as<std::decay_t<R2>, R>
+        requires std::same_as<std::remove_reference_t<R2>, R>
     constexpr default_searcher(R2&& r, Pred pred, Proj proj = {})
         : default_searcher(std::ranges::begin(r), std::ranges::end(r), std::move(pred), std::move(proj)) {}
 
@@ -114,7 +114,7 @@ class default_searcher {
 template <std::ranges::forward_range                                          R,
           std::copy_constructible                                             Pred = std::ranges::equal_to,
           std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity>
-default_searcher(R&&, Pred = {}, Proj = {}) -> default_searcher<std::decay_t<R>, Pred, Proj>;
+default_searcher(R&&, Pred = {}, Proj = {}) -> default_searcher<std::remove_reference_t<R>, Pred, Proj>;
 
 template <std::ranges::random_access_range                                    R,
           std::copy_constructible                                             Pred = std::ranges::equal_to,
@@ -135,17 +135,16 @@ class boyer_moore_searcher {
   public:
     boyer_moore_searcher(std::ranges::iterator_t<R> pat_first,
                          std::ranges::sentinel_t<R> pat_last,
-                         Hash                       hash = {},
                          Pred                       pred = {},
-                         Proj                       proj = {})
+                         Proj                       proj = {},
+                         Hash                       hash = {})
         : pat_first_(pat_first),
           pat_last_(pat_last),
           pred_(std::move(pred)),
           proj_(std::move(proj)),
           pattern_length_(pat_last - pat_first),
           skip_table_(std::make_shared<skip_table_type>(pattern_length_, -1, hash, pred_)),
-          suffix_(std::__allocate_shared_unbounded_array<difference_type[]>(std::allocator<difference_type>(),
-                                                                            pattern_length_ + 1)) {
+          suffix_(std::make_shared<difference_type[]>(pattern_length_ + 1)) {
         difference_type i = 0;
         while (pat_first != pat_last) {
             skip_table_->insert(*pat_first, i);
@@ -159,9 +158,9 @@ class boyer_moore_searcher {
     explicit boyer_moore_searcher(R2&& r) : boyer_moore_searcher(std::ranges::begin(r), std::ranges::end(r)) {}
     template <typename R2>
         requires std::same_as<std::remove_reference_t<R2>, R>
-    boyer_moore_searcher(R2& r, Hash hash, Pred pred = {}, Proj proj = {})
+    boyer_moore_searcher(R2& r, Pred pred, Proj proj = {}, Hash hash = {})
         : boyer_moore_searcher(
-              std::ranges::begin(r), std::ranges::end(r), std::move(hash), std::move(pred), std::move(proj)) {}
+              std::ranges::begin(r), std::ranges::end(r), std::move(pred), std::move(proj), std::move(hash)) {}
 
     template <std::random_access_iterator I2, std::sentinel_for<I2> S2, class Proj2 = std::identity>
         requires std::indirectly_comparable<I2, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
@@ -263,7 +262,7 @@ template <std::ranges::random_access_range                                    R,
           std::copy_constructible                                             Pred = std::ranges::equal_to,
           std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity,
           class Hash = std::hash<detail::projected_value_t<std::ranges::iterator_t<R>, Proj>>>
-boyer_moore_searcher(R&&, Hash = {}, Pred = {}, Proj = {})
+boyer_moore_searcher(R&&, Pred = {}, Proj = {}, Hash = {})
     -> boyer_moore_searcher<std::remove_reference_t<R>, Pred, Proj, Hash>;
 
 template <std::ranges::random_access_range                                    R,
@@ -285,9 +284,9 @@ class boyer_moore_horspool_searcher {
   public:
     boyer_moore_horspool_searcher(std::ranges::iterator_t<R> pat_first,
                                   std::ranges::sentinel_t<R> pat_last,
-                                  Hash                       hash = {},
                                   Pred                       pred = {},
-                                  Proj                       proj = {})
+                                  Proj                       proj = {},
+                                  Hash                       hash = {})
         : pat_first_(pat_first),
           pat_last_(pat_last),
           pred_(std::move(pred)),
@@ -310,9 +309,9 @@ class boyer_moore_horspool_searcher {
         : boyer_moore_horspool_searcher(std::ranges::begin(r), std::ranges::end(r)) {}
     template <typename R2>
         requires std::same_as<std::remove_reference_t<R2>, R>
-    boyer_moore_horspool_searcher(R2& r, Hash hash, Pred pred = {}, Proj proj = {})
+    boyer_moore_horspool_searcher(R2& r, Pred pred, Proj proj = {}, Hash hash = {})
         : boyer_moore_horspool_searcher(
-              std::ranges::begin(r), std::ranges::end(r), std::move(hash), std::move(pred), std::move(proj)) {}
+              std::ranges::begin(r), std::ranges::end(r), std::move(pred), std::move(proj), std::move(hash)) {}
 
     template <std::random_access_iterator I2, std::sentinel_for<I2> S2, class Proj2 = std::identity>
         requires std::indirectly_comparable<I2, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
@@ -366,7 +365,7 @@ template <std::ranges::random_access_range                                    R,
           std::copy_constructible                                             Pred = std::ranges::equal_to,
           std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity,
           class Hash = std::hash<detail::projected_value_t<std::ranges::iterator_t<R>, Proj>>>
-boyer_moore_horspool_searcher(R&&, Hash = {}, Pred = {}, Proj = {})
+boyer_moore_horspool_searcher(R&&, Pred = {}, Proj = {}, Hash = {})
     -> boyer_moore_horspool_searcher<std::remove_reference_t<R>, Pred, Proj, Hash>;
 
 template <std::forward_iterator I, std::sentinel_for<I> S, class Searcher, class Proj = std::identity>

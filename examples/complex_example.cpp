@@ -1,47 +1,25 @@
-#include <algorithm>
+#include <functional>
 #include <iostream>
-#include <memory>
-#include <ranges>
 #include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 #if __cpp_lib_print >= 202207L
 #include <print>
 #endif
 
-#include <beman/scan_view/scan.hpp>
+#include <beman/range_searcher/searcher.hpp>
 
-namespace std {
-string to_string(string_view str) { return string{str}; }
-} // namespace std
-
-namespace ranges = std::ranges;
-namespace views  = std::views;
-namespace exe    = beman::scan_view;
-
-struct A {
-        operator std::unique_ptr<int>() const { return std::make_unique<int>(); }
-    int operator*() const { return 0; }
-};
+namespace exe     = beman::range_searcher;
+namespace branges = exe::ranges;
 
 #if __cpp_lib_print >= 202207L && __cpp_lib_format_ranges >= 202207L
-void print(auto&& rng) { std::print("{}", std::forward<decltype(rng)>(rng)); }
+void print(auto&& rng) { std::print("{:s}", std::forward<decltype(rng)>(rng)); }
 
-void println(auto&& rng) { std::println("{}", std::forward<decltype(rng)>(rng)); }
+void println(auto&& rng) { std::println("{:s}", std::forward<decltype(rng)>(rng)); }
 #else
 void print(auto&& rng) {
-    std::cout << "[";
-    bool first = true;
-    for (auto&& elem : rng) {
-        if (first)
-            first = false;
-        else
-            std::cout << ", ";
+    for (auto&& elem : rng)
         std::cout << elem;
-    }
-    std::cout << "]";
 }
 
 void println(auto&& rng) {
@@ -50,30 +28,37 @@ void println(auto&& rng) {
 }
 #endif
 
+// Example given in the paper for range-based searchers. (Needs C++23)
 int main() {
-    std::vector vec{1, 2, 3, 4, 5, 4, 3, 2, 1};
-    println(exe::scan(vec, std::plus{}));
-    const auto R = exe::scan(vec, std::ranges::max);
-    println(R);
-    println(exe::scan(std::as_const(vec), std::plus{}, 10));
+    std::string haystack = "a quick brown fox jumps over the lazy dog";
+    std::string needle   = "Jump";
 
-    std::vector vec2{1, 2147483647, 20, 3};
-    println(exe::scan(vec2, std::plus{}, 0LL));
-    static_assert(std::is_same_v<std::decay_t<ranges::range_reference_t<decltype(exe::scan(vec2, std::plus{}, 0LL))>>,
-                                 long long>);
+    if (branges::contains_subrange(haystack, branges::default_searcher{needle}))
+        println("Jump found!");
+    else
+        println("Jump not found!");
+    if (branges::contains_subrange(haystack, branges::boyer_moore_searcher{needle, [](auto a, auto b) {
+                                                                               return std::tolower(a) ==
+                                                                                      std::tolower(b);
+                                                                           }}))
+        println("Jump (case-insensitive) found!");
+    else
+        println("Jump (case-insensitive) not found!");
+    if (branges::contains_subrange(haystack, branges::boyer_moore_horspool_searcher{needle, {}, [](auto c) -> char {
+                                                                                        return std::tolower(c);
+                                                                                    }}))
+        println("Jump (case-insensitive) found!");
+    else
+        println("Jump (case-insensitive) not found!");
 
-    std::vector vec3{1, 2, 3};
-    println(exe::scan(
-        vec3, [](const auto& a, const auto& b) mutable { return std::to_string(a) + std::to_string(b); }, "2"));
+    auto result = branges::search(
+        haystack, branges::boyer_moore_horspool_searcher{"Jumps-Over"}, [](char ch) { return ch == ' ' ? '-' : ch; });
+    println("Offset: " + std::to_string(result.begin() - haystack.begin()));
+    auto result2 = branges::search(
+        haystack,
+        branges::default_searcher{std::string_view{"Jumps-Over"}, {}, [](auto c) -> char { return std::tolower(c); }},
+        [](char ch) { return ch == ' ' ? '-' : ch; });
+    println("Offset: " + std::to_string(result2.begin() - haystack.begin()));
 
-#if __cplusplus >= 202302L && __cpp_lib_ranges >= 202207L // FTM for P2494R2
-    std::vector<std::unique_ptr<int>> vec4;
-    vec4.push_back(std::make_unique<int>(5));
-    vec4.push_back(std::make_unique<int>(2));
-    vec4.push_back(std::make_unique<int>(10));
-    println(exe::scan(vec4, [](const auto& a, const auto& b) { return a + *b; }, 3));
-    println(exe::scan(
-                vec3, [](const auto& a, const auto& b) { return std::make_unique<int>(*a + b); }, A{}) |
-            views::transform([](const auto& a) { return *a; }));
-#endif
+    return 0;
 }
