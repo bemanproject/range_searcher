@@ -38,8 +38,17 @@ int main() {
     print("[");
     print(result);
     print("]");
-    print(std::ranges::subrange{result.end(), haystack.end()});
+    println(std::ranges::subrange{result.end(), haystack.end()});
     // Output: a quick brown fox [jump]s over the lazy dog
+
+    if (branges::contains_subrange(haystack, branges::boyer_moore_horspool_searcher{needle}))
+        println("jump found!");
+    else
+        println("jump not found!");
+    if (branges::contains_subrange(haystack, branges::boyer_moore_horspool_searcher{"run"}))
+        println("run found!");
+    else
+        println("run not found!");
 
     return 0;
 }
