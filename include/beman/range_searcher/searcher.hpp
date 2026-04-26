@@ -4,465 +4,291 @@
 #define BEMAN_RANGE_SEARCHER_SEARCHER_HPP
 
 #include <algorithm>
-#include <concepts>
 #include <functional>
-#include <optional>
+#include <iterator>
+#include <limits>
+#include <memory>
 #include <ranges>
 #include <type_traits>
-#include <utility>
+#include <unordered_map>
 
-namespace beman::scan_view {
+namespace beman::range_searcher {
 
 namespace detail {
 
-// until C++23, `__movable_box` was named `__copyable_box` and required the stored type to be copy-constructible, not
-// just move-constructible; we preserve the old behavior in pre-C++23 modes.
-template <class Tp>
-concept movable_box_object =
-#if __cpp_lib_ranges >= 202207L
-    std::move_constructible<Tp>
-#else
-    std::copy_constructible<Tp>
-#endif
-    && std::is_object_v<Tp>;
+template <std::indirectly_readable I, std::indirectly_regular_unary_invocable<I> Proj>
+using projected_value_t = std::remove_cvref_t<std::invoke_result_t<Proj&, std::iter_value_t<I>&>>;
 
-// Primary template - uses std::optional and introduces an empty state in case assignment fails.
-template <movable_box_object Tp>
-class movable_box {
-    [[no_unique_address]] std::optional<Tp> val_;
+// The following is directly copied from libc++ <include/functional/boyer_moore_searcher.h>
+// With modification to support projection
+template <class Key, class Value, class Hash, class BinaryPredicate, bool /*useArray*/>
+class BMSkipTable;
 
-  public:
-    template <class... Args>
-        requires std::is_constructible_v<Tp, Args...>
-    constexpr explicit movable_box(std::in_place_t,
-                                   Args&&... args) noexcept(std::is_nothrow_constructible_v<Tp, Args...>)
-        : val_(std::in_place, std::forward<Args>(args)...) {}
-
-    constexpr movable_box() noexcept(std::is_nothrow_default_constructible_v<Tp>)
-        requires std::default_initializable<Tp>
-        : val_(std::in_place) {}
-
-    movable_box(const movable_box&) = default;
-    movable_box(movable_box&&)      = default;
-
-    constexpr movable_box& operator=(const movable_box& other) noexcept(std::is_nothrow_copy_constructible_v<Tp>)
-#if __cpp_lib_ranges >= 202207L
-        requires std::copy_constructible<Tp>
-#endif
-    {
-        if (this != std::addressof(other)) {
-            if (other.has_value())
-                val_.emplace(*other);
-            else
-                val_.reset();
-        }
-        return *this;
-    }
-
-    movable_box& operator=(movable_box&&)
-        requires std::movable<Tp>
-    = default;
-
-    constexpr movable_box& operator=(movable_box&& other) noexcept(std::is_nothrow_move_constructible_v<Tp>) {
-        if (this != std::addressof(other)) {
-            if (other.has_value())
-                val_.emplace(std::move(*other));
-            else
-                val_.reset();
-        }
-        return *this;
-    }
-
-    constexpr const Tp& operator*() const noexcept { return *val_; }
-    constexpr Tp&       operator*() noexcept { return *val_; }
-
-    constexpr const Tp* operator->() const noexcept { return val_.operator->(); }
-    constexpr Tp*       operator->() noexcept { return val_.operator->(); }
-
-    [[nodiscard]] constexpr bool has_value() const noexcept { return val_.has_value(); }
-};
-
-template <bool Const, class Tp>
-using maybe_const = std::conditional_t<Const, const Tp, Tp>;
-
-template <class Op, class Indices, class... BoundArgs>
-struct perfect_forward_impl;
-
-template <class Op, size_t... Idx, class... BoundArgs>
-struct perfect_forward_impl<Op, std::index_sequence<Idx...>, BoundArgs...> {
+// General case for BM data searching; use a map
+template <class Key, class Value, class Hash, class BinaryPredicate>
+class BMSkipTable<Key, Value, Hash, BinaryPredicate, false> {
   private:
-    std::tuple<BoundArgs...> bound_args_;
+    using value_type = Value;
+    using key_type   = Key;
+
+    const value_type                                      default_value_;
+    std::unordered_map<Key, Value, Hash, BinaryPredicate> table_;
 
   public:
-    template <class... Args, class = std::enable_if_t<std::is_constructible_v<std::tuple<BoundArgs...>, Args&&...>>>
-    explicit constexpr perfect_forward_impl(Args&&... bound_args) : bound_args_(std::forward<Args>(bound_args)...) {}
+    explicit BMSkipTable(size_t sz, value_type default_value, Hash hash, BinaryPredicate pred)
+        : default_value_(default_value), table_(sz, hash, pred) {}
 
-    perfect_forward_impl(const perfect_forward_impl&) = default;
-    perfect_forward_impl(perfect_forward_impl&&)      = default;
+    void insert(const key_type& key, value_type val) { table_[key] = val; }
 
-    perfect_forward_impl& operator=(const perfect_forward_impl&) = default;
-    perfect_forward_impl& operator=(perfect_forward_impl&&)      = default;
-
-    template <class... Args, class = std::enable_if_t<std::is_invocable_v<Op, BoundArgs&..., Args...>>>
-    constexpr auto
-    operator()(Args&&... args) & noexcept(noexcept(Op()(std::get<Idx>(bound_args_)..., std::forward<Args>(args)...)))
-        -> decltype(Op()(std::get<Idx>(bound_args_)..., std::forward<Args>(args)...)) {
-        return Op()(std::get<Idx>(bound_args_)..., std::forward<Args>(args)...);
-    }
-
-    template <class... Args, class = std::enable_if_t<!std::is_invocable_v<Op, BoundArgs&..., Args...>>>
-    auto operator()(Args&&...) & = delete;
-
-    template <class... Args, class = std::enable_if_t<std::is_invocable_v<Op, const BoundArgs&..., Args...>>>
-    constexpr auto operator()(Args&&... args) const& noexcept(noexcept(Op()(std::get<Idx>(bound_args_)...,
-                                                                            std::forward<Args>(args)...)))
-        -> decltype(Op()(std::get<Idx>(bound_args_)..., std::forward<Args>(args)...)) {
-        return Op()(std::get<Idx>(bound_args_)..., std::forward<Args>(args)...);
-    }
-
-    template <class... Args, class = std::enable_if_t<!std::is_invocable_v<Op, const BoundArgs&..., Args...>>>
-    auto operator()(Args&&...) const& = delete;
-
-    template <class... Args, class = std::enable_if_t<std::is_invocable_v<Op, BoundArgs..., Args...>>>
-    constexpr auto operator()(Args&&... args) && noexcept(noexcept(Op()(std::get<Idx>(std::move(bound_args_))...,
-                                                                        std::forward<Args>(args)...)))
-        -> decltype(Op()(std::get<Idx>(std::move(bound_args_))..., std::forward<Args>(args)...)) {
-        return Op()(std::get<Idx>(std::move(bound_args_))..., std::forward<Args>(args)...);
-    }
-
-    template <class... Args, class = std::enable_if_t<!std::is_invocable_v<Op, BoundArgs..., Args...>>>
-    auto operator()(Args&&...) && = delete;
-
-    template <class... Args, class = std::enable_if_t<std::is_invocable_v<Op, const BoundArgs..., Args...>>>
-    constexpr auto operator()(Args&&... args) const&& noexcept(noexcept(Op()(std::get<Idx>(std::move(bound_args_))...,
-                                                                             std::forward<Args>(args)...)))
-        -> decltype(Op()(std::get<Idx>(std::move(bound_args_))..., std::forward<Args>(args)...)) {
-        return Op()(std::get<Idx>(std::move(bound_args_))..., std::forward<Args>(args)...);
-    }
-
-    template <class... Args, class = std::enable_if_t<!std::is_invocable_v<Op, const BoundArgs..., Args...>>>
-    auto operator()(Args&&...) const&& = delete;
-};
-
-// perfect_forward implements a perfect-forwarding call wrapper as explained in [func.require].
-template <class Op, class... Args>
-using perfect_forward = perfect_forward_impl<Op, std::index_sequence_for<Args...>, Args...>;
-
-struct compose_op {
-    template <class Fn1, class Fn2, class... Args>
-    constexpr auto operator()(Fn1&& f1, Fn2&& f2, Args&&... args) const
-        noexcept(noexcept(std::invoke(std::forward<Fn1>(f1),
-                                      std::invoke(std::forward<Fn2>(f2), std::forward<Args>(args)...))))
-            -> decltype(std::invoke(std::forward<Fn1>(f1),
-                                    std::invoke(std::forward<Fn2>(f2), std::forward<Args>(args)...))) {
-        return std::invoke(std::forward<Fn1>(f1), std::invoke(std::forward<Fn2>(f2), std::forward<Args>(args)...));
+    value_type operator[](const key_type& key) const {
+        auto it = table_.find(key);
+        return it == table_.end() ? default_value_ : it->second;
     }
 };
 
-template <class Fn1, class Fn2>
-struct compose_t : perfect_forward<compose_op, Fn1, Fn2> {
-    using perfect_forward<compose_op, Fn1, Fn2>::perfect_forward;
-};
+// Special case small numeric values; use an array
+template <class Key, class Value, class Hash, class BinaryPredicate>
+class BMSkipTable<Key, Value, Hash, BinaryPredicate, true> {
+  private:
+    using value_type = Value;
+    using key_type   = Key;
 
-template <class Fn1, class Fn2>
-constexpr auto compose(Fn1&& f1, Fn2&& f2) noexcept(
-    noexcept(compose_t<std::decay_t<Fn1>, std::decay_t<Fn2>>(std::forward<Fn1>(f1), std::forward<Fn2>(f2))))
-    -> decltype(compose_t<std::decay_t<Fn1>, std::decay_t<Fn2>>(std::forward<Fn1>(f1), std::forward<Fn2>(f2))) {
-    return compose_t<std::decay_t<Fn1>, std::decay_t<Fn2>>(std::forward<Fn1>(f1), std::forward<Fn2>(f2));
-}
+    using unsigned_key_type = std::make_unsigned_t<key_type>;
+    std::array<value_type, 256> table_;
+    static_assert(std::numeric_limits<unsigned_key_type>::max() < 256);
 
-// CRTP base that one can derive from in order to be considered a range adaptor closure
-// by the library. When deriving from this class, a pipe operator will be provided to
-// make the following hold:
-// - `x | f` is equivalent to `f(x)`
-// - `f1 | f2` is an adaptor closure `g` such that `g(x)` is equivalent to `f2(f1(x))`
-template <class Tp>
-struct range_adaptor_closure;
-
-// Type that wraps an arbitrary function object and makes it into a range adaptor closure,
-// i.e. something that can be called via the `x | f` notation.
-template <class Fn>
-struct range_adaptor_closure_t : Fn, range_adaptor_closure<range_adaptor_closure_t<Fn>> {
-    constexpr explicit range_adaptor_closure_t(Fn&& f) : Fn(std::move(f)) {}
-};
-
-template <class Tp>
-concept RangeAdaptorClosure =
-    std::derived_from<std::remove_cvref_t<Tp>, range_adaptor_closure<std::remove_cvref_t<Tp>>>;
-
-template <class Tp>
-struct range_adaptor_closure {
-    template <std::ranges::viewable_range View, RangeAdaptorClosure Closure>
-        requires std::same_as<Tp, std::remove_cvref_t<Closure>> && std::invocable<Closure, View>
-    [[nodiscard]] friend constexpr decltype(auto)
-    operator|(View&& view, Closure&& closure) noexcept(std::is_nothrow_invocable_v<Closure, View>) {
-        return std::invoke(std::forward<Closure>(closure), std::forward<View>(view));
+  public:
+    explicit BMSkipTable(size_t, value_type default_value, Hash, BinaryPredicate) {
+        std::fill_n(table_.data(), table_.size(), default_value);
     }
 
-    template <RangeAdaptorClosure Closure, RangeAdaptorClosure OtherClosure>
-        requires std::same_as<Tp, std::remove_cvref_t<Closure>> &&
-                 std::constructible_from<std::decay_t<Closure>, Closure> &&
-                 std::constructible_from<std::decay_t<OtherClosure>, OtherClosure>
-    [[nodiscard]] friend constexpr auto
-    operator|(Closure&&      c1,
-              OtherClosure&& c2) noexcept(std::is_nothrow_constructible_v<std::decay_t<Closure>, Closure> &&
-                                          std::is_nothrow_constructible_v<std::decay_t<OtherClosure>, OtherClosure>) {
-        return range_adaptor_closure_t(compose(std::forward<OtherClosure>(c2), std::forward<Closure>(c1)));
-    }
+    void insert(key_type key, value_type val) { table_[static_cast<unsigned_key_type>(key)] = val; }
+
+    value_type operator[](key_type key) const { return table_[static_cast<unsigned_key_type>(key)]; }
 };
-
-template <size_t NBound, class = std::make_index_sequence<NBound>>
-struct bind_back_op;
-
-template <size_t NBound, size_t... Ip>
-struct bind_back_op<NBound, std::index_sequence<Ip...>> {
-    template <class Fn, class BoundArgs, class... Args>
-    constexpr auto operator()(Fn&& f, BoundArgs&& bound_args, Args&&... args) const noexcept(noexcept(std::invoke(
-        std::forward<Fn>(f), std::forward<Args>(args)..., std::get<Ip>(std::forward<BoundArgs>(bound_args))...)))
-        -> decltype(std::invoke(std::forward<Fn>(f),
-                                std::forward<Args>(args)...,
-                                std::get<Ip>(std::forward<BoundArgs>(bound_args))...)) {
-        return std::invoke(
-            std::forward<Fn>(f), std::forward<Args>(args)..., std::get<Ip>(std::forward<BoundArgs>(bound_args))...);
-    }
-};
-
-template <class Fn, class BoundArgs>
-struct bind_back_t : perfect_forward<bind_back_op<std::tuple_size_v<BoundArgs>>, Fn, BoundArgs> {
-    using perfect_forward<bind_back_op<std::tuple_size_v<BoundArgs>>, Fn, BoundArgs>::perfect_forward;
-};
-
-template <class Fn, class... Args>
-    requires std::is_constructible_v<std::decay_t<Fn>, Fn> && std::is_move_constructible_v<std::decay_t<Fn>> &&
-             (std::is_constructible_v<std::decay_t<Args>, Args> && ...) &&
-             (std::is_move_constructible_v<std::decay_t<Args>> && ...)
-constexpr auto
-bind_back(Fn&& f, Args&&... args) noexcept(noexcept(bind_back_t<std::decay_t<Fn>, std::tuple<std::decay_t<Args>...>>(
-    std::forward<Fn>(f), std::forward_as_tuple(std::forward<Args>(args)...))))
-    -> decltype(bind_back_t<std::decay_t<Fn>, std::tuple<std::decay_t<Args>...>>(
-        std::forward<Fn>(f), std::forward_as_tuple(std::forward<Args>(args)...))) {
-    return bind_back_t<std::decay_t<Fn>, std::tuple<std::decay_t<Args>...>>(
-        std::forward<Fn>(f), std::forward_as_tuple(std::forward<Args>(args)...));
-}
-
-template <class F>
-constexpr bool tidy_func =
-    std::is_empty_v<F> && std::is_trivially_default_constructible_v<F> && std::is_trivially_destructible_v<F>;
 
 } // namespace detail
 
-enum class scan_view_kind : bool { unseeded, seeded };
+template <class Searcher, class I, class S, class P = std::identity>
+concept searchable = std::copyable<Searcher> && std::invocable<Searcher, I, S, P> &&
+                     std::ranges::forward_range<std::invoke_result_t<Searcher, I, S, P>>;
 
-template <typename V, typename F, typename T, typename U>
-concept scannable_impl = // exposition only
-    std::movable<U> && std::convertible_to<T, U> && std::invocable<F&, U, std::ranges::range_reference_t<V>> &&
-    std::assignable_from<U&, std::invoke_result_t<F&, U, std::ranges::range_reference_t<V>>>;
+namespace ranges {
 
-template <typename V, typename F, typename T>
-concept scannable = // exposition only
-    std::invocable<F&, T, std::ranges::range_reference_t<V>> &&
-    std::convertible_to<std::invoke_result_t<F&, T, std::ranges::range_reference_t<V>>,
-                        std::decay_t<std::invoke_result_t<F&, T, std::ranges::range_reference_t<V>>>> &&
-    scannable_impl<V, F, T, std::decay_t<std::invoke_result_t<F&, T, std::ranges::range_reference_t<V>>>>;
-
-template <std::ranges::input_range V,
-          std::move_constructible  F,
-          std::move_constructible  T,
-          scan_view_kind           K = scan_view_kind::unseeded>
-    requires std::ranges::view<V> && std::is_object_v<F> && std::is_object_v<T> && scannable<V, F, T>
-class scan_view : public std::ranges::view_interface<scan_view<V, F, T, K>> {
-  private:
-    // [range.scan.iterator], class template scan_view::iterator
-    template <bool>
-    class iterator; // exposition only
-
-    template <bool>
-    friend class iterator; // exposition only
-
-    V                      base_ = V(); // exposition only
-    detail::movable_box<F> fun_;        // exposition only
-    detail::movable_box<T> init_;       // exposition only
-
+template <std::ranges::forward_range                                          R,
+          std::copy_constructible                                             Pred = std::ranges::equal_to,
+          std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity>
+class default_searcher {
   public:
-    scan_view()
-        requires std::default_initializable<V> && std::default_initializable<F>
-    = default;
-    constexpr explicit scan_view(V base, F fun)
-        requires(K == scan_view_kind::unseeded)
-        : base_{std::move(base)}, fun_{std::in_place, std::move(fun)} {}
-    constexpr explicit scan_view(V base, F fun, T init)
-        requires(K == scan_view_kind::seeded)
-        : base_{std::move(base)}, fun_{std::in_place, std::move(fun)}, init_{std::in_place, std::move(init)} {}
+    constexpr default_searcher(std::ranges::iterator_t<R> pat_first,
+                               std::ranges::sentinel_t<R> pat_last,
+                               Pred                       pred = {},
+                               Proj                       proj = {})
+        : pat_first_(pat_first), pat_last_(pat_last), pred_(std::move(pred)), proj_(std::move(proj)) {}
+    template <typename R2>
+        requires std::same_as<std::decay_t<R2>, R>
+    constexpr explicit default_searcher(R2&& r) : default_searcher(std::ranges::begin(r), std::ranges::end(r)) {}
+    template <typename R2>
+        requires std::same_as<std::decay_t<R2>, R>
+    constexpr default_searcher(R2&& r, Pred pred, Proj proj = {})
+        : default_searcher(std::ranges::begin(r), std::ranges::end(r), std::move(pred), std::move(proj)) {}
 
-    constexpr V base() const&
-        requires std::copy_constructible<V>
-    {
-        return base_;
+    template <std::forward_iterator I2, std::sentinel_for<I2> S2, class Proj2 = std::identity>
+        requires std::indirectly_comparable<I2, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
+    constexpr std::ranges::subrange<I2> operator()(I2 first, S2 last, Proj2 proj2 = {}) const {
+        return std::ranges::search(first, last, pat_first_, pat_last_, pred_, proj2, proj_);
     }
-    constexpr V base() && { return std::move(base_); }
-
-    constexpr iterator<false> begin() { return iterator<false>{*this, std::ranges::begin(base_)}; }
-    constexpr iterator<true>  begin() const
-        requires std::ranges::range<const V> && scannable<const V, const F, T>
-    {
-        return iterator<true>{*this, std::ranges::begin(base_)};
-    }
-
-    [[nodiscard]] constexpr std::default_sentinel_t end() const noexcept { return std::default_sentinel; }
-
-    constexpr auto size()
-        requires std::ranges::sized_range<V>
-    {
-        return std::ranges::size(base_);
-    }
-    constexpr auto size() const
-        requires std::ranges::sized_range<const V>
-    {
-        return std::ranges::size(base_);
+    template <std::ranges::forward_range R2, class Proj2 = std::identity>
+        requires std::indirectly_comparable<std::ranges::iterator_t<R2>, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
+    constexpr std::ranges::borrowed_subrange_t<R2> operator()(R2&& r2, Proj2 proj2 = {}) const {
+        return std::ranges::search(std::forward<R2>(r2), pat_first_, pat_last_, pred_, proj2, proj_);
     }
 
-#if __cpp_lib_ranges_reserve_hint >= 202502L
-    constexpr auto reserve_hint()
-        requires std::ranges::approximately_sized_range<V>
-    {
-        return std::ranges::reserve_hint(base_);
-    }
-
-    constexpr auto reserve_hint() const
-        requires std::ranges::approximately_sized_range<const V>
-    {
-        return std::ranges::reserve_hint(base_);
-    }
-#endif
+  private:
+    [[no_unique_address]] std::ranges::iterator_t<R> pat_first_; // exposition only
+    [[no_unique_address]] std::ranges::sentinel_t<R> pat_last_;  // exposition only
+    [[no_unique_address]] Pred                       pred_;      // exposition only
+    [[no_unique_address]] Proj                       proj_;      // exposition only
 };
 
-template <class R, class F>
-scan_view(R&&, F) -> scan_view<std::views::all_t<R>, F, std::ranges::range_value_t<R>>;
-template <class R, class F, class T>
-scan_view(R&&, F, T) -> scan_view<std::views::all_t<R>, F, T, scan_view_kind::seeded>;
+template <std::ranges::forward_range                                          R,
+          std::copy_constructible                                             Pred = std::ranges::equal_to,
+          std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity>
+default_searcher(R&&, Pred = {}, Proj = {}) -> default_searcher<std::decay_t<R>, Pred, Proj>;
 
-template <std::ranges::input_range V, std::move_constructible F, std::move_constructible T, scan_view_kind K>
-    requires std::ranges::view<V> && std::is_object_v<F> && std::is_object_v<T> && scannable<V, F, T>
-template <bool Const>
-class scan_view<V, F, T, K>::iterator {
+template <std::ranges::random_access_range                                    R,
+          std::copy_constructible                                             Pred = std::ranges::equal_to,
+          std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity,
+          class Hash = std::hash<detail::projected_value_t<std::ranges::iterator_t<R>, Proj>>>
+class boyer_moore_searcher {
   private:
-    using Parent     = detail::maybe_const<Const, scan_view>; // exposition only
-    using Base       = detail::maybe_const<Const, V>;         // exposition only
-    using Func       = detail::maybe_const<Const, F>;         // exposition only
-    using ResultType = std::decay_t<                          // exposition only
-        std::invoke_result_t<Func&, T, std::ranges::range_reference_t<Base>>>;
-
-    struct Holder {                                                           // exposition only
-        std::ranges::sentinel_t<Base> end_ = std::ranges::sentinel_t<Base>(); // exposition only
-        detail::movable_box<F>        fun_;                                   // exposition only
-        detail::movable_box<T>        init_;                                  // exposition only
-    };
-    using HolderType = std::conditional_t<detail::tidy_func<F>, Holder, Parent*>; // exposition only
-
-    std::ranges::iterator_t<Base>   current_ = std::ranges::iterator_t<Base>(); // exposition only
-    HolderType                      parent_  = {};                              // exposition only
-    detail::movable_box<ResultType> sum_;                                       // exposition only
-
-    constexpr std::ranges::sentinel_t<Base> get_end() const { // exposition only
-        if constexpr (detail::tidy_func<F>)
-            return parent_.end_;
-        else
-            return std::ranges::end(parent_->base_);
-    }
-    constexpr Func& get_fun() { // exposition only
-        if constexpr (detail::tidy_func<F>)
-            return *parent_.fun_;
-        else
-            return *parent_->fun_;
-    }
-    constexpr T& get_init() { // exposition only
-        if constexpr (detail::tidy_func<F>)
-            return *parent_.init_;
-        else
-            return *parent_->init_;
-    }
-    static constexpr HolderType init(Parent& parent) { // exposition only
-        if constexpr (detail::tidy_func<F>)
-            return {std::ranges::end(parent.base_), detail::movable_box<F>{std::in_place}, parent.init_};
-        else
-            return std::addressof(parent);
-    }
+    using difference_type = std::ranges::range_difference_t<R>;
+    using value_type      = detail::projected_value_t<std::ranges::iterator_t<R>, Proj>;
+    using skip_table_type = detail::BMSkipTable<value_type,
+                                                difference_type,
+                                                Hash,
+                                                Pred,
+                                                std::is_integral_v<value_type> && sizeof(value_type) == 1 &&
+                                                    std::is_same_v<Hash, std::hash<value_type>> &&
+                                                    std::is_same_v<Pred, std::ranges::equal_to>>;
 
   public:
-    using iterator_concept = std::input_iterator_tag;
-    using value_type       = ResultType;
-    using difference_type  = std::ranges::range_difference_t<Base>;
+    boyer_moore_searcher(std::ranges::iterator_t<R> pat_first,
+                         std::ranges::sentinel_t<R> pat_last,
+                         Hash                       hash = {},
+                         Pred                       pred = {},
+                         Proj                       proj = {})
+        : pat_first_(pat_first),
+          pat_last_(pat_last),
+          pred_(std::move(pred)),
+          proj_(std::move(proj)),
+          pattern_length_(pat_last - pat_first),
+          skip_table_(std::make_shared<skip_table_type>(pattern_length_, -1, hash, pred_)),
+          suffix_(std::__allocate_shared_unbounded_array<difference_type[]>(std::allocator<difference_type>(),
+                                                                            pattern_length_ + 1)) {
+        difference_type i = 0;
+        while (pat_first != pat_last) {
+            skip_table_->insert(*pat_first, i);
+            ++pat_first;
+            ++i;
+        }
+        build_suffix_table(pat_first_, pat_last_, pred_, proj_);
+    }
+    template <typename R2>
+        requires std::same_as<std::decay_t<R2>, R>
+    explicit boyer_moore_searcher(R2&& r) : boyer_moore_searcher(std::ranges::begin(r), std::ranges::end(r)) {}
+    template <typename R2>
+        requires std::same_as<std::decay_t<R2>, R>
+    boyer_moore_searcher(R2& r, Hash hash, Pred pred = {}, Proj proj = {})
+        : boyer_moore_searcher(
+              std::ranges::begin(r), std::ranges::end(r), std::move(hash), std::move(pred), std::move(proj)) {}
 
-    iterator()
-        requires std::default_initializable<std::ranges::iterator_t<Base>>
-    = default;
-    constexpr iterator(Parent& parent, std::ranges::iterator_t<Base> current)
-        : current_{std::move(current)}, parent_{init(parent)} {
-        if (current_ == get_end())
+    template <std::random_access_iterator I2, std::sentinel_for<I2> S2, class Proj2 = std::identity>
+        requires std::indirectly_comparable<I2, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
+    std::ranges::subrange<I2> operator()(I2 first, S2 last, Proj2 proj2 = {}) const {
+        static_assert(
+            std::is_same_v<std::remove_cvref_t<value_type>, std::remove_cvref_t<detail::projected_value_t<I2, Proj2>>>,
+            "Corpus and Pattern iterators must point to the same type");
+        if (first == last)
+            return {first, last};
+        if (pat_first_ == pat_last_)
+            return {first, first};
+
+        if (pattern_length_ > (last - first))
+            return {last, last};
+        return search(first, last, proj2);
+    }
+    template <std::ranges::random_access_range R2, class Proj2 = std::identity>
+        requires std::indirectly_comparable<std::ranges::iterator_t<R2>, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
+    std::ranges::borrowed_subrange_t<R2> operator()(R2&& r2, Proj2 proj2 = {}) const {
+        return operator()(std::ranges::begin(r2), std::ranges::end(r2), proj2);
+    }
+
+  private:
+    [[no_unique_address]] std::ranges::iterator_t<R> pat_first_; // exposition only
+    [[no_unique_address]] std::ranges::sentinel_t<R> pat_last_;  // exposition only
+    [[no_unique_address]] Pred                       pred_;      // exposition only
+    [[no_unique_address]] Proj                       proj_;      // exposition only
+    difference_type                                  pattern_length_;
+    std::shared_ptr<skip_table_type>                 skip_table_;
+    std::shared_ptr<difference_type[]>               suffix_;
+
+    template <typename I2, typename S2, typename Proj2>
+    std::ranges::subrange<I2> search(I2 f, S2 l, Proj2 proj2) const {
+        I2                     current    = f;
+        const I2               last       = l - pattern_length_;
+        const skip_table_type& skip_table = *skip_table_;
+
+        while (current <= last) {
+            difference_type j = pattern_length_;
+            while (pred_(std::invoke(proj_, pat_first_[j - 1]), std::invoke(proj2, current[j - 1]))) {
+                --j;
+                if (j == 0)
+                    return {current, current + pattern_length_};
+            }
+
+            difference_type k = skip_table[std::invoke(proj2, current[j - 1])];
+            difference_type m = j - k - 1;
+            if (k < j && m > suffix_[j])
+                current += m;
+            else
+                current += suffix_[j];
+        }
+        return {l, l};
+    }
+
+    template <typename I2, typename S2, typename Container>
+    static void compute_bm_prefix(I2 first, S2 last, Pred pred, Proj proj, Container& prefix) {
+        const size_t count = last - first;
+
+        prefix[0] = 0;
+        size_t k  = 0;
+
+        for (size_t i = 1; i != count; ++i) {
+            while (k > 0 && !pred(std::invoke(proj, first[k]), std::invoke(proj, first[i])))
+                k = prefix[k - 1];
+
+            if (pred(std::invoke(proj, first[k]), std::invoke(proj, first[i])))
+                ++k;
+            prefix[i] = k;
+        }
+    }
+
+    void build_suffix_table(std::ranges::iterator_t<R> first, std::ranges::sentinel_t<R> last, Pred pred, Proj proj) {
+        const size_t count = last - first;
+
+        if (count == 0)
             return;
-        if constexpr (K == scan_view_kind::seeded) {
-            sum_ = detail::movable_box<ResultType>{std::in_place, std::invoke(get_fun(), get_init(), *current_)};
-        } else {
-            sum_ = detail::movable_box<ResultType>{std::in_place, *current_};
+
+        auto scratch = std::make_unique<difference_type[]>(count);
+
+        compute_bm_prefix(first, last, pred, proj, scratch);
+        for (size_t i = 0; i <= count; ++i)
+            suffix_[i] = count - scratch[count - 1];
+
+        using ReverseIter = std::reverse_iterator<std::ranges::iterator_t<R>>;
+        compute_bm_prefix(ReverseIter(last), ReverseIter(first), pred, proj, scratch);
+
+        for (size_t i = 0; i != count; ++i) {
+            const size_t          j = count - scratch[i];
+            const difference_type k = i - scratch[i] + 1;
+
+            if (suffix_[j] > k)
+                suffix_[j] = k;
         }
-    }
-    constexpr iterator(iterator<!Const> i)
-        requires Const && std::convertible_to<std::ranges::iterator_t<V>, std::ranges::iterator_t<Base>>
-        : current_{std::move(i.current_)}, parent_{std::move(i.parent_)}, sum_{std::move(i.sum_)} {}
-
-    constexpr const std::ranges::iterator_t<Base>& base() const& noexcept { return current_; }
-    constexpr std::ranges::iterator_t<Base>        base() && { return std::move(current_); }
-
-    constexpr const value_type& operator*() const { return *sum_; }
-
-    constexpr iterator& operator++() {
-        if (++current_ != get_end()) {
-            sum_ = detail::movable_box<ResultType>{std::in_place, std::invoke(get_fun(), std::move(*sum_), *current_)};
-        }
-        return *this;
-    }
-    constexpr void operator++(int) { ++*this; }
-
-    friend constexpr bool operator==(const iterator& x, const iterator& y)
-        requires std::equality_comparable<std::ranges::iterator_t<Base>>
-    {
-        return x.current_ == y.current_;
-    }
-    friend constexpr bool operator==(const iterator& x, std::default_sentinel_t) { return x.current_ == x.get_end(); }
-};
-
-namespace detail {
-
-struct scan_t {
-    constexpr scan_t() = default;
-    constexpr auto operator()(std::ranges::input_range auto&& E, auto&& F) const {
-        return scan_view{std::forward<decltype(E)>(E), std::forward<decltype(F)>(F)};
-    }
-    constexpr auto operator()(std::ranges::input_range auto&& E, auto&& F, auto&& G) const {
-        return scan_view{std::forward<decltype(E)>(E), std::forward<decltype(F)>(F), std::forward<decltype(G)>(G)};
-    }
-
-    constexpr auto operator()(auto&& E) const {
-        return detail::range_adaptor_closure_t(detail::bind_back(*this, std::forward<decltype(E)>(E)));
-    }
-    constexpr auto operator()(auto&& E, auto&& F) const {
-        return detail::range_adaptor_closure_t(
-            detail::bind_back(*this, std::forward<decltype(E)>(E), std::forward<decltype(F)>(F)));
     }
 };
 
-} // namespace detail
+template <std::ranges::random_access_range                                    R,
+          std::copy_constructible                                             Pred = std::ranges::equal_to,
+          std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity,
+          class Hash = std::hash<detail::projected_value_t<std::ranges::iterator_t<R>, Proj>>>
+boyer_moore_searcher(R&&, Hash = {}, Pred = {}, Proj = {}) -> boyer_moore_searcher<std::decay_t<R>, Pred, Proj, Hash>;
 
-inline constexpr detail::scan_t scan{};
+template <std::forward_iterator I, std::sentinel_for<I> S, class Searcher, class Proj = std::identity>
+    requires searchable<Searcher, I, S, Proj>
+constexpr auto search(I first, S last, const Searcher& searcher, Proj proj = {}) {
+    return searcher(first, last, proj);
+}
+template <std::ranges::forward_range R, class Searcher, class Proj = std::identity>
+    requires searchable<Searcher, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>, Proj>
+constexpr auto search(R&& r, const Searcher& searcher, Proj proj = {}) {
+    return searcher(std::ranges::begin(r), std::ranges::end(r), proj);
+}
 
-} // namespace beman::scan_view
+template <std::forward_iterator I, std::sentinel_for<I> S, class Searcher, class Proj = std::identity>
+    requires searchable<Searcher, I, S, Proj>
+constexpr bool contains_subrange(I first, S last, const Searcher& searcher, Proj proj = {}) {
+    return !std::ranges::empty(search(first, last, searcher, proj));
+}
+template <std::ranges::forward_range R, class Searcher, class Proj = std::identity>
+    requires searchable<Searcher, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>, Proj>
+constexpr bool contains_subrange(R&& r, const Searcher& searcher, Proj proj = {}) {
+    return !std::ranges::empty(search(std::forward<R>(r), searcher, proj));
+}
 
-// Conditionally borrowed range (P3117)
-template <std::ranges::input_range         V,
-          std::move_constructible          F,
-          std::move_constructible          T,
-          beman::scan_view::scan_view_kind K>
-constexpr bool std::ranges::enable_borrowed_range<beman::scan_view::scan_view<V, F, T, K>> =
-    std::ranges::enable_borrowed_range<V> && beman::scan_view::detail::tidy_func<F>;
+} // namespace ranges
+
+} // namespace beman::range_searcher
 
 #endif // BEMAN_RANGE_SEARCHER_SEARCHER_HPP

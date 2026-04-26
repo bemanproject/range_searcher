@@ -10,7 +10,8 @@ SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 [![Coverage](https://coveralls.io/repos/github/bemanproject/range_searcher/badge.svg?branch=main)](https://coveralls.io/github/bemanproject/range_searcher?branch=main)
 ![Standard Target](https://github.com/bemanproject/beman/blob/main/images/badges/cpp29.svg)
 
-**Implements**: Range-based searchers and range overloads of `std::search` with search arguments, proposed in [Range-Based Searchers (P4205R0)](https://wg21.link/P4205R0).
+**Implements**: Range-based searchers and range overloads of `std::search` with search arguments,
+proposed in [Range-Based Searchers (P4205R0)](https://wg21.link/P4205R0).
 
 **Status**: [Under development and not yet ready for production use.](https://github.com/bemanproject/beman/blob/main/docs/beman_library_maturity_model.md#under-development-and-not-yet-ready-for-production-use)
 
@@ -18,9 +19,16 @@ SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 beman.range_searcher is licensed under the Apache License v2.0 with LLVM Exceptions.
 
+Note: this project includes code from the LLVM project.
+
 ## Usage
 
-TODO
+Implements the following proposed addition to the standard library:
+
+- Searcher-based overloads for `std::ranges::search` and `std::ranges::contains_subrange`
+- Concept `std::searchable` that captures the standard searcher requirements
+- `std::ranges::default_searcher`, `std::ranges::boyer_moore_searcher`, `std::ranges::boyer_moore_horspool_searcher`
+  - Range-ified versions of the standard searchers, with API revamped to accommodate C++20 range and iterator-sentinel model.
 
 ```cpp
 #include <functional>
@@ -30,8 +38,24 @@ TODO
 #include <beman/range_searcher/searcher.hpp>
 
 namespace exe = beman::range_searcher;
+namespace branges = exe::ranges;
 
-// TODO
+// Example given in the paper for range-based searchers. (Needs C++23)
+int main() {
+    std::string haystack = "a quick brown fox jumps over the lazy dog";
+    std::string needle = "jump";
+
+    branges::boyer_moore_searcher searcher(needle);
+    auto result = branges::search(haystack, searcher);
+    print(std::ranges::subrange{haystack.begin(), result.begin()});
+    print("[");
+    print(result);
+    print("]");
+    print(std::ranges::subrange{result.end(), haystack.end()});
+    // Output: a quick brown fox [jump]s over the lazy dog
+
+    return 0;
+}
 ```
 
 Full runnable examples can be found in [`examples/`](examples/).

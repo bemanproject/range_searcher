@@ -1,31 +1,24 @@
 #include <functional>
 #include <iostream>
-#include <vector>
+#include <string>
 
 #if __cpp_lib_print >= 202207L
 #include <print>
 #endif
 
-#include <beman/scan_view/scan.hpp>
+#include <beman/range_searcher/searcher.hpp>
 
-namespace exe = beman::scan_view;
+namespace exe     = beman::range_searcher;
+namespace branges = exe::ranges;
 
 #if __cpp_lib_print >= 202207L && __cpp_lib_format_ranges >= 202207L
-void print(auto&& rng) { std::print("{}", std::forward<decltype(rng)>(rng)); }
+void print(auto&& rng) { std::print("{:s}", std::forward<decltype(rng)>(rng)); }
 
-void println(auto&& rng) { std::println("{}", std::forward<decltype(rng)>(rng)); }
+void println(auto&& rng) { std::println("{:s}", std::forward<decltype(rng)>(rng)); }
 #else
 void print(auto&& rng) {
-    std::cout << "[";
-    bool first = true;
-    for (auto&& elem : rng) {
-        if (first)
-            first = false;
-        else
-            std::cout << ", ";
+    for (auto&& elem : rng)
         std::cout << elem;
-    }
-    std::cout << "]";
 }
 
 void println(auto&& rng) {
@@ -34,18 +27,19 @@ void println(auto&& rng) {
 }
 #endif
 
-// Example given in the paper for `views::scan`. (Needs C++23)
+// Example given in the paper for range-based searchers. (Needs C++23)
 int main() {
-    std::vector vec{1, 2, 3, 4, 5, 4, 3, 2, 1};
+    std::string haystack = "a quick brown fox jumps over the lazy dog";
+    std::string needle   = "jump";
 
-    // [1, 3, 6, 10, 15, 19, 22, 24, 25]
-    println(vec | exe::scan(std::plus{}));
-    // [11, 13, 16, 20, 25, 29, 32, 34, 35]
-    println(vec | exe::scan(std::plus{}, 10));
-    // [1, 2, 3, 4, 5, 5, 5, 5, 5]
-    println(vec | exe::scan(std::ranges::max));
-    // [3, 3, 3, 4, 5, 5, 5, 5, 5]
-    println(vec | exe::scan(std::ranges::max, 3));
+    branges::boyer_moore_searcher searcher(needle);
+    auto                          result = branges::search(haystack, searcher);
+    print(std::ranges::subrange{haystack.begin(), result.begin()});
+    print("[");
+    print(result);
+    print("]");
+    print(std::ranges::subrange{result.end(), haystack.end()});
+    // Output: a quick brown fox [jump]s over the lazy dog
 
     return 0;
 }
