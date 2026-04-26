@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# Codeowners for reviews on PRs
+
+# Github Actions:
+.github/workflows/ @wusatosi @Mick235711
+
+# Devcontainer:
+.devcontainer/ @wusatosi @Mick235711
+
+# Pre-commit:
+.pre-commit-config.yaml @wusatosi @Mick235711
+.markdownlint.yaml @wusatosi @Mick235711
+
+# *  @ednolan @bretbrownjr @camio @dietmarkuehl @neatudarius @steve-downey @wusatosi
+* @Mick235711
