@@ -67,6 +67,18 @@ class BMSkipTable<Key, Value, Hash, BinaryPredicate, true> {
     value_type operator[](key_type key) const { return table_[static_cast<unsigned_key_type>(key)]; }
 };
 
+// Wrapper for hash that respects projection
+template <typename Hash, typename Proj>
+class hash_wrapper {
+  private:
+    Hash hash_;
+    Proj proj_;
+
+  public:
+    hash_wrapper(const Hash& hash, const Proj& proj) : hash_(hash), proj_(proj) {}
+    std::size_t operator()(const auto& key) const { return hash_(std::invoke(proj_, key)); }
+};
+
 } // namespace detail
 
 template <class Searcher, class I, class S, class P = std::identity>
@@ -126,7 +138,7 @@ class boyer_moore_searcher {
     using value_type      = detail::projected_value_t<std::ranges::iterator_t<R>, Proj>;
     using skip_table_type = detail::BMSkipTable<value_type,
                                                 difference_type,
-                                                Hash,
+                                                detail::hash_wrapper<Hash, Proj>,
                                                 Pred,
                                                 std::is_integral_v<value_type> && sizeof(value_type) == 1 &&
                                                     std::is_same_v<Hash, std::hash<value_type>> &&
@@ -143,11 +155,12 @@ class boyer_moore_searcher {
           pred_(std::move(pred)),
           proj_(std::move(proj)),
           pattern_length_(pat_last - pat_first),
-          skip_table_(std::make_shared<skip_table_type>(pattern_length_, -1, hash, pred_)),
+          skip_table_(std::make_shared<skip_table_type>(
+              pattern_length_, -1, detail::hash_wrapper<Hash, Proj>(hash, proj_), pred_)),
           suffix_(std::make_shared<difference_type[]>(pattern_length_ + 1)) {
         difference_type i = 0;
         while (pat_first != pat_last) {
-            skip_table_->insert(*pat_first, i);
+            skip_table_->insert(std::invoke(proj_, *pat_first), i);
             ++pat_first;
             ++i;
         }
@@ -275,7 +288,7 @@ class boyer_moore_horspool_searcher {
     using value_type      = detail::projected_value_t<std::ranges::iterator_t<R>, Proj>;
     using skip_table_type = detail::BMSkipTable<value_type,
                                                 difference_type,
-                                                Hash,
+                                                detail::hash_wrapper<Hash, Proj>,
                                                 Pred,
                                                 std::is_integral_v<value_type> && sizeof(value_type) == 1 &&
                                                     std::is_same_v<Hash, std::hash<value_type>> &&
@@ -292,13 +305,14 @@ class boyer_moore_horspool_searcher {
           pred_(std::move(pred)),
           proj_(std::move(proj)),
           pattern_length_(pat_last - pat_first),
-          skip_table_(std::make_shared<skip_table_type>(pattern_length_, pattern_length_, hash, pred_)) {
+          skip_table_(std::make_shared<skip_table_type>(
+              pattern_length_, pattern_length_, detail::hash_wrapper<Hash, Proj>(hash, proj_), pred_)) {
         if (pat_first == pat_last)
             return;
         --pat_last;
         difference_type i = 0;
         while (pat_first != pat_last) {
-            skip_table_->insert(*pat_first, pattern_length_ - 1 - i);
+            skip_table_->insert(std::invoke(proj_, *pat_first), pattern_length_ - 1 - i);
             ++pat_first;
             ++i;
         }
@@ -355,7 +369,7 @@ class boyer_moore_horspool_searcher {
                 if (j == 0)
                     return {current, current + pattern_length_};
             }
-            current += skip_table[current[pattern_length_ - 1]];
+            current += skip_table[std::invoke(proj2, current[pattern_length_ - 1])];
         }
         return {l, l};
     }

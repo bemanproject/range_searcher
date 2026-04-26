@@ -244,3 +244,281 @@ TEST(RangeSearcher, Split) {
     test2.operator()<branges::boyer_moore_searcher<std::string_view>>();
     test2.operator()<branges::boyer_moore_horspool_searcher<std::string_view>>();
 }
+
+struct hash_mod2 {
+    std::size_t operator()(int val) const { return std::hash<int>{}(val % 2); }
+};
+struct hash_tolower {
+    std::size_t operator()(char ch) const { return std::hash<char>{}(std::tolower(ch)); }
+};
+
+TEST(RangeSearcher, Predicate) {
+    std::vector vec  = {1, 2, 3, 4};
+    std::vector vec2 = {12, 13};
+    std::vector vec3 = {12, 14};
+    ASSERT_TRUE(branges::contains_subrange(
+        vec, branges::default_searcher{vec2, [](auto a, auto b) { return a % 2 == b % 2; }}));
+    ASSERT_EQ(
+        branges::search(vec, branges::default_searcher{vec2, [](auto a, auto b) { return a % 2 == b % 2; }}).begin() -
+            vec.begin(),
+        1);
+    ASSERT_EQ(
+        branges::search(vec, branges::default_searcher{vec2, [](auto a, auto b) { return a % 2 == b % 2; }}).end() -
+            vec.begin(),
+        3);
+    ASSERT_FALSE(branges::contains_subrange(
+        vec, branges::default_searcher{vec3, [](auto a, auto b) { return a % 2 == b % 2; }}));
+    ASSERT_EQ(
+        branges::search(vec, branges::default_searcher{vec3, [](auto a, auto b) { return a % 2 == b % 2; }}).begin(),
+        vec.end());
+    ASSERT_EQ(
+        branges::search(vec, branges::default_searcher{vec3, [](auto a, auto b) { return a % 2 == b % 2; }}).end(),
+        vec.end());
+    ASSERT_TRUE(branges::contains_subrange(
+        vec, branges::boyer_moore_searcher{vec2, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}}));
+    ASSERT_EQ(
+        branges::search(
+            vec, branges::boyer_moore_searcher{vec2, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}})
+                .begin() -
+            vec.begin(),
+        1);
+    ASSERT_EQ(
+        branges::search(
+            vec, branges::boyer_moore_searcher{vec2, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}})
+                .end() -
+            vec.begin(),
+        3);
+    ASSERT_FALSE(branges::contains_subrange(
+        vec, branges::boyer_moore_searcher{vec3, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}}));
+    ASSERT_EQ(
+        branges::search(
+            vec, branges::boyer_moore_searcher{vec3, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}})
+            .begin(),
+        vec.end());
+    ASSERT_EQ(
+        branges::search(
+            vec, branges::boyer_moore_searcher{vec3, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}})
+            .end(),
+        vec.end());
+    ASSERT_TRUE(branges::contains_subrange(
+        vec,
+        branges::boyer_moore_horspool_searcher{vec2, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}}));
+    ASSERT_EQ(branges::search(vec,
+                              branges::boyer_moore_horspool_searcher{
+                                  vec2, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}})
+                      .begin() -
+                  vec.begin(),
+              1);
+    ASSERT_EQ(branges::search(vec,
+                              branges::boyer_moore_horspool_searcher{
+                                  vec2, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}})
+                      .end() -
+                  vec.begin(),
+              3);
+    ASSERT_FALSE(branges::contains_subrange(
+        vec,
+        branges::boyer_moore_horspool_searcher{vec3, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}}));
+    ASSERT_EQ(branges::search(vec,
+                              branges::boyer_moore_horspool_searcher{
+                                  vec3, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}})
+                  .begin(),
+              vec.end());
+    ASSERT_EQ(branges::search(vec,
+                              branges::boyer_moore_horspool_searcher{
+                                  vec3, [](auto a, auto b) { return a % 2 == b % 2; }, {}, hash_mod2{}})
+                  .end(),
+              vec.end());
+
+    std::string haystack = "a quick brown fox jumps over the lazy dog";
+    std::string needle   = "JUMP";
+    ASSERT_TRUE(branges::contains_subrange(haystack, branges::default_searcher{needle, [](auto a, auto b) {
+                                                                                   return std::tolower(a) ==
+                                                                                          std::tolower(b);
+                                                                               }}));
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::default_searcher{needle, [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }})
+                      .begin() -
+                  haystack.begin(),
+              18);
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::default_searcher{needle, [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }})
+                      .end() -
+                  haystack.begin(),
+              22);
+    ASSERT_FALSE(branges::contains_subrange(haystack, branges::default_searcher{"Jamp", [](auto a, auto b) {
+                                                                                    return std::tolower(a) ==
+                                                                                           std::tolower(b);
+                                                                                }}));
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::default_searcher{"Jamp", [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }})
+                  .begin(),
+              haystack.end());
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::default_searcher{"Jamp", [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }})
+                  .end(),
+              haystack.end());
+    ASSERT_TRUE(branges::contains_subrange(
+        haystack,
+        branges::boyer_moore_searcher{
+            needle, [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}}));
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::boyer_moore_searcher{
+                      needle, [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}})
+                      .begin() -
+                  haystack.begin(),
+              18);
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::boyer_moore_searcher{
+                      needle, [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}})
+                      .end() -
+                  haystack.begin(),
+              22);
+    ASSERT_FALSE(branges::contains_subrange(
+        haystack,
+        branges::boyer_moore_searcher{
+            "Jamp", [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}}));
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::boyer_moore_searcher{
+                      "Jamp", [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}})
+                  .begin(),
+              haystack.end());
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::boyer_moore_searcher{
+                      "Jamp", [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}})
+                  .end(),
+              haystack.end());
+    ASSERT_TRUE(branges::contains_subrange(
+        haystack,
+        branges::boyer_moore_horspool_searcher{
+            needle, [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}}));
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::boyer_moore_horspool_searcher{
+                      needle, [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}})
+                      .begin() -
+                  haystack.begin(),
+              18);
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::boyer_moore_horspool_searcher{
+                      needle, [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}})
+                      .end() -
+                  haystack.begin(),
+              22);
+    ASSERT_FALSE(branges::contains_subrange(
+        haystack,
+        branges::boyer_moore_horspool_searcher{
+            "Jamp", [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}}));
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::boyer_moore_horspool_searcher{
+                      "Jamp", [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}})
+                  .begin(),
+              haystack.end());
+    ASSERT_EQ(branges::search(
+                  haystack,
+                  branges::boyer_moore_horspool_searcher{
+                      "Jamp", [](auto a, auto b) { return std::tolower(a) == std::tolower(b); }, {}, hash_tolower{}})
+                  .end(),
+              haystack.end());
+}
+
+TEST(RangeSearcher, Projection) {
+    std::vector vec  = {1, 2, 3, 4};
+    std::vector vec2 = {12, 13};
+    std::vector vec3 = {12, 14};
+    ASSERT_TRUE(branges::contains_subrange(
+        vec, branges::default_searcher{vec2, {}, [](auto a) { return a % 3; }}, [](auto a) { return a % 2; }));
+    ASSERT_EQ(branges::search(
+                  vec, branges::default_searcher{vec2, {}, [](auto a) { return a % 3; }}, [](auto a) { return a % 2; })
+                      .begin() -
+                  vec.begin(),
+              1);
+    ASSERT_EQ(branges::search(
+                  vec, branges::default_searcher{vec2, {}, [](auto a) { return a % 3; }}, [](auto a) { return a % 2; })
+                      .end() -
+                  vec.begin(),
+              3);
+    ASSERT_FALSE(branges::contains_subrange(
+        vec, branges::default_searcher{vec3, {}, [](auto a) { return a % 3; }}, [](auto a) { return a % 2; }));
+    ASSERT_EQ(branges::search(
+                  vec, branges::default_searcher{vec3, {}, [](auto a) { return a % 3; }}, [](auto a) { return a % 2; })
+                  .begin(),
+              vec.end());
+    ASSERT_EQ(branges::search(
+                  vec, branges::default_searcher{vec3, {}, [](auto a) { return a % 3; }}, [](auto a) { return a % 2; })
+                  .end(),
+              vec.end());
+    ASSERT_TRUE(branges::contains_subrange(
+        vec, branges::boyer_moore_searcher{vec2, {}, [](auto a) { return a % 3; }}, [](auto a) { return a % 2; }));
+    ASSERT_EQ(branges::search(
+                  vec,
+                  branges::boyer_moore_searcher{vec2, {}, [](auto a) { return a % 3; }},
+                  [](auto a) {
+                      return a % 2;
+                  }).begin() -
+                  vec.begin(),
+              1);
+    ASSERT_EQ(branges::search(
+                  vec,
+                  branges::boyer_moore_searcher{vec2, {}, [](auto a) { return a % 3; }},
+                  [](auto a) {
+                      return a % 2;
+                  }).end() -
+                  vec.begin(),
+              3);
+    ASSERT_FALSE(branges::contains_subrange(
+        vec, branges::boyer_moore_searcher{vec3, {}, [](auto a) { return a % 3; }}, [](auto a) { return a % 2; }));
+    ASSERT_EQ(branges::search(vec,
+                              branges::boyer_moore_searcher{vec3, {}, [](auto a) { return a % 3; }},
+                              [](auto a) { return a % 2; })
+                  .begin(),
+              vec.end());
+    ASSERT_EQ(branges::search(vec,
+                              branges::boyer_moore_searcher{vec3, {}, [](auto a) { return a % 3; }},
+                              [](auto a) { return a % 2; })
+                  .end(),
+              vec.end());
+    ASSERT_TRUE(branges::contains_subrange(
+        vec, branges::boyer_moore_horspool_searcher{vec2, {}, [](auto a) { return a % 3; }}, [](auto a) {
+            return a % 2;
+        }));
+    ASSERT_EQ(branges::search(
+                  vec,
+                  branges::boyer_moore_horspool_searcher{vec2, {}, [](auto a) { return a % 3; }},
+                  [](auto a) {
+                      return a % 2;
+                  }).begin() -
+                  vec.begin(),
+              1);
+    ASSERT_EQ(branges::search(
+                  vec,
+                  branges::boyer_moore_horspool_searcher{vec2, {}, [](auto a) { return a % 3; }},
+                  [](auto a) {
+                      return a % 2;
+                  }).end() -
+                  vec.begin(),
+              3);
+    ASSERT_FALSE(branges::contains_subrange(
+        vec, branges::boyer_moore_horspool_searcher{vec3, {}, [](auto a) { return a % 3; }}, [](auto a) {
+            return a % 2;
+        }));
+    ASSERT_EQ(branges::search(vec,
+                              branges::boyer_moore_horspool_searcher{vec3, {}, [](auto a) { return a % 3; }},
+                              [](auto a) { return a % 2; })
+                  .begin(),
+              vec.end());
+    ASSERT_EQ(branges::search(vec,
+                              branges::boyer_moore_horspool_searcher{vec3, {}, [](auto a) { return a % 3; }},
+                              [](auto a) { return a % 2; })
+                  .end(),
+              vec.end());
+}
