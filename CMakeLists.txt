@@ -41,7 +41,8 @@ target_sources(
     PUBLIC
         FILE_SET HEADERS
             BASE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/include include
-            FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/beman/range_searcher/searcher.hpp
+            FILES
+                ${CMAKE_CURRENT_SOURCE_DIR}/include/beman/range_searcher/searcher.hpp
 )
 
 set_target_properties(
