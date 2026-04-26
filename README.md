@@ -19,7 +19,7 @@ proposed in [Range-Based Searchers (P4205R0)](https://wg21.link/P4205R0).
 
 beman.range_searcher is licensed under the Apache License v2.0 with LLVM Exceptions.
 
-Note: this project includes code from the LLVM project.
+Note: this project includes code from [the LLVM project](https://github.com/llvm/llvm-project).
 
 ## Usage
 

@@ -15,12 +15,12 @@
 
 include_guard(GLOBAL)
 
-set(CMAKE_C_COMPILER gcc-15)
-set(CMAKE_CXX_COMPILER g++-15)
+set(CMAKE_C_COMPILER gcc)
+set(CMAKE_CXX_COMPILER g++)
 
 if(BEMAN_BUILDSYS_SANITIZER STREQUAL "MaxSan")
     set(SANITIZER_FLAGS
-        "-fsanitize=undefined -fsanitize-undefined-trap-on-error"
+        "-fsanitize=address -fsanitize=leak -fsanitize=pointer-compare -fsanitize=pointer-subtract -fsanitize=undefined -fsanitize-undefined-trap-on-error"
     )
 elseif(BEMAN_BUILDSYS_SANITIZER STREQUAL "TSan")
     set(SANITIZER_FLAGS "-fsanitize=thread")
