@@ -4,6 +4,7 @@
 #define BEMAN_RANGE_SEARCHER_SEARCHER_HPP
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <iterator>
 #include <limits>
