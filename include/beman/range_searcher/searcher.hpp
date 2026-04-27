@@ -108,12 +108,13 @@ class default_searcher {
     template <std::forward_iterator I2, std::sentinel_for<I2> S2, class Proj2 = std::identity>
         requires std::indirectly_comparable<I2, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
     constexpr std::ranges::subrange<I2> operator()(I2 first, S2 last, Proj2 proj2 = {}) const {
-        return std::ranges::search(first, last, pat_first_, pat_last_, pred_, proj2, proj_);
+        return std::ranges::search(first, last, pat_first_, pat_last_, pred_, std::move(proj2), proj_);
     }
     template <std::ranges::forward_range R2, class Proj2 = std::identity>
         requires std::indirectly_comparable<std::ranges::iterator_t<R2>, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
     constexpr std::ranges::borrowed_subrange_t<R2> operator()(R2&& r2, Proj2 proj2 = {}) const {
-        return std::ranges::search(std::forward<R2>(r2), pat_first_, pat_last_, pred_, proj2, proj_);
+        return std::ranges::search(
+            std::ranges::begin(r2), std::ranges::end(r2), pat_first_, pat_last_, pred_, std::move(proj2), proj_);
     }
 
   private:
@@ -389,23 +390,26 @@ boyer_moore_horspool_searcher(R&&, Pred = {}, Proj = {}, Hash = {})
 template <std::forward_iterator I, std::sentinel_for<I> S, class Searcher, class Proj = std::identity>
     requires searchable<Searcher, I, S, Proj>
 constexpr auto search(I first, S last, const Searcher& searcher, Proj proj = {}) {
-    return searcher(first, last, proj);
+    return searcher(first, last, std::move(proj));
 }
 template <std::ranges::forward_range R, class Searcher, class Proj = std::identity>
     requires searchable<Searcher, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>, Proj>
 constexpr auto search(R&& r, const Searcher& searcher, Proj proj = {}) {
-    return searcher(std::ranges::begin(r), std::ranges::end(r), proj);
+    if constexpr (requires { searcher(std::forward<R>(r), std::move(proj)); })
+        return searcher(std::forward<R>(r), std::move(proj));
+    else
+        return searcher(std::ranges::begin(r), std::ranges::end(r), std::move(proj));
 }
 
 template <std::forward_iterator I, std::sentinel_for<I> S, class Searcher, class Proj = std::identity>
     requires searchable<Searcher, I, S, Proj>
 constexpr bool contains_subrange(I first, S last, const Searcher& searcher, Proj proj = {}) {
-    return !std::ranges::empty(search(first, last, searcher, proj));
+    return !std::ranges::empty(search(first, last, searcher, std::move(proj)));
 }
 template <std::ranges::forward_range R, class Searcher, class Proj = std::identity>
     requires searchable<Searcher, std::ranges::iterator_t<R>, std::ranges::sentinel_t<R>, Proj>
 constexpr bool contains_subrange(R&& r, const Searcher& searcher, Proj proj = {}) {
-    return !std::ranges::empty(search(std::forward<R>(r), searcher, proj));
+    return !std::ranges::empty(search(std::forward<R>(r), searcher, std::move(proj)));
 }
 
 } // namespace ranges
