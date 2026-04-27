@@ -132,6 +132,7 @@ template <std::ranges::random_access_range                                    R,
           std::copy_constructible                                             Pred = std::ranges::equal_to,
           std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity,
           class Hash = std::hash<detail::projected_value_t<std::ranges::iterator_t<R>, Proj>>>
+    requires std::semiregular<std::ranges::range_value_t<R>>
 class boyer_moore_searcher {
   private:
     using difference_type = std::ranges::range_difference_t<R>;
@@ -193,7 +194,7 @@ class boyer_moore_searcher {
     template <std::ranges::random_access_range R2, class Proj2 = std::identity>
         requires std::indirectly_comparable<std::ranges::iterator_t<R2>, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
     std::ranges::borrowed_subrange_t<R2> operator()(R2&& r2, Proj2 proj2 = {}) const {
-        return operator()(std::ranges::begin(r2), std::ranges::end(r2), proj2);
+        return operator()(std::ranges::begin(r2), std::ranges::end(r2), std::move(proj2));
     }
 
   private:
@@ -275,6 +276,7 @@ template <std::ranges::random_access_range                                    R,
           std::copy_constructible                                             Pred = std::ranges::equal_to,
           std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity,
           class Hash = std::hash<detail::projected_value_t<std::ranges::iterator_t<R>, Proj>>>
+    requires std::semiregular<std::ranges::range_value_t<R>>
 boyer_moore_searcher(R&&, Pred = {}, Proj = {}, Hash = {})
     -> boyer_moore_searcher<std::remove_reference_t<R>, Pred, Proj, Hash>;
 
@@ -282,6 +284,7 @@ template <std::ranges::random_access_range                                    R,
           std::copy_constructible                                             Pred = std::ranges::equal_to,
           std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity,
           class Hash = std::hash<detail::projected_value_t<std::ranges::iterator_t<R>, Proj>>>
+    requires std::semiregular<std::ranges::range_value_t<R>>
 class boyer_moore_horspool_searcher {
   private:
     using difference_type = std::ranges::range_difference_t<R>;
@@ -345,7 +348,7 @@ class boyer_moore_horspool_searcher {
     template <std::ranges::random_access_range R2, class Proj2 = std::identity>
         requires std::indirectly_comparable<std::ranges::iterator_t<R2>, std::ranges::iterator_t<R>, Pred, Proj2, Proj>
     std::ranges::borrowed_subrange_t<R2> operator()(R2&& r2, Proj2 proj2 = {}) const {
-        return operator()(std::ranges::begin(r2), std::ranges::end(r2), proj2);
+        return operator()(std::ranges::begin(r2), std::ranges::end(r2), std::move(proj2));
     }
 
   private:
@@ -379,6 +382,7 @@ template <std::ranges::random_access_range                                    R,
           std::copy_constructible                                             Pred = std::ranges::equal_to,
           std::indirectly_regular_unary_invocable<std::ranges::iterator_t<R>> Proj = std::identity,
           class Hash = std::hash<detail::projected_value_t<std::ranges::iterator_t<R>, Proj>>>
+    requires std::semiregular<std::ranges::range_value_t<R>>
 boyer_moore_horspool_searcher(R&&, Pred = {}, Proj = {}, Hash = {})
     -> boyer_moore_horspool_searcher<std::remove_reference_t<R>, Pred, Proj, Hash>;
 
