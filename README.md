@@ -81,7 +81,7 @@ You can disable building tests by setting CMake option `BEMAN_RANGE_SEARCHER_BUI
 
 | Compiler   | Version | C++ Standards | Standard Library  |
 |------------|---------|---------------|-------------------|
-| GCC        | 15-13   | C++26-C++20   | libstdc++         |
+| GCC        | 16-13   | C++26-C++20   | libstdc++         |
 | GCC        | 12      | C++23, C++20  | libstdc++         |
 | Clang      | 20-19   | C++26-C++20   | libstdc++, libc++ |
 | Clang      | 18-17   | C++26-C++20   | libc++            |
