@@ -1,0 +1,17 @@
+{
+  "name": "beman-range-searcher",
+  "version-semver": "@VERSION@",
+  "description": "Implementation of range-based searchers and range overloads of Searcher-based std::search",
+  "homepage": "https://github.com/bemanproject/range_searcher",
+  "license": "Apache-2.0 WITH LLVM-exception",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}

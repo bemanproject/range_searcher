@@ -3,8 +3,7 @@
 cmake_minimum_required(VERSION 3.30...4.3)
 
 project(
-    beman.range_searcher # CMake Project Name, which is also the name of the top-level
-    # targets (e.g., library, executable, etc.).
+    beman.range_searcher
     DESCRIPTION
         "Range-based searchers and range overloads of searcher-based std::search"
     LANGUAGES CXX

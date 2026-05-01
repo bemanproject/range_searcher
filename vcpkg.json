@@ -1,0 +1,10 @@
+{
+  "name": "beman-range-searcher",
+  "version-semver": "0.1.0",
+  "dependencies": [
+    {
+      "name": "gtest",
+      "host": true
+    }
+  ]
+}
