@@ -10,10 +10,10 @@ SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 [![Lint Check (pre-commit)](https://github.com/bemanproject/range_searcher/actions/workflows/pre-commit-check.yml/badge.svg)](https://github.com/bemanproject/range_searcher/actions/workflows/pre-commit-check.yml)
 [![Coverage](https://coveralls.io/repos/github/bemanproject/range_searcher/badge.svg?branch=main)](https://coveralls.io/github/bemanproject/range_searcher?branch=main)
 ![Standard Target](https://github.com/bemanproject/beman/blob/main/images/badges/cpp29.svg)
+[![Compiler Explorer Example](https://img.shields.io/badge/Try%20it%20on%20Compiler%20Explorer-grey?logo=compilerexplorer&logoColor=67c52a)](https://godbolt.org/z/hG7vGW9MT)
 <!-- markdownlint-restore -->
 
-**Implements**: Range-based searchers and range overloads of `std::search` with search arguments,
-proposed in [Range-Based Searchers (P4205R0)](https://wg21.link/P4205R0).
+**Implements**: Range-based searchers and range overloads of `std::search` with search arguments, proposed in [Range-Based Searchers (P4205R0)](https://wg21.link/P4205R0).
 
 **Status**: [Under development and not yet ready for production use.](https://github.com/bemanproject/beman/blob/main/docs/beman_library_maturity_model.md#under-development-and-not-yet-ready-for-production-use)
 
@@ -49,19 +49,19 @@ int main() {
 
     branges::boyer_moore_searcher searcher(needle);
     auto                          result = branges::search(haystack, searcher);
-    print(std::ranges::subrange{haystack.begin(), result.begin()});
-    print("[");
-    print(result);
-    print("]");
-    println(std::ranges::subrange{result.end(), haystack.end()});
+    std::print("{:s}", std::ranges::subrange{haystack.begin(), result.begin()});
+    std::print("[");
+    std::print("{:s}", result);
+    std::print("]");
+    std::println("{:s}", std::ranges::subrange{result.end(), haystack.end()});
     // Output: a quick brown fox [jump]s over the lazy dog
 
     if (branges::contains_subrange(haystack, branges::boyer_moore_horspool_searcher{needle}))
-        println("jump found!");
-    else println("jump not found!");
+        std::println("jump found!");
+    else std::println("jump not found!");
     if (branges::contains_subrange(haystack, branges::boyer_moore_horspool_searcher{"run"}))
-        println("run found!");
-    else println("run not found!");
+        std::println("run found!");
+    else std::println("run not found!");
 
     return 0;
 }
