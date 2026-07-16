@@ -9,6 +9,7 @@ if(BEMAN_RANGE_SEARCHER_USE_MODULES)
                 FILES
                     config.hpp
                     searcher.hpp
+                    detail/expo_only.hpp
                     "${PROJECT_BINARY_DIR}/include/beman/range_searcher/config_generated.hpp"
     )
 else()
@@ -19,6 +20,7 @@ else()
                 FILES
                     config.hpp
                     searcher.hpp
+                    detail/expo_only.hpp
                     "${PROJECT_BINARY_DIR}/include/beman/range_searcher/config_generated.hpp"
     )
 endif()
