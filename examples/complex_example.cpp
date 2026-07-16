@@ -40,7 +40,6 @@ void println(auto&& rng) {
 }
 #endif
 
-// Example given in the paper for range-based searchers. (Needs C++23)
 int main() {
     std::string haystack = "a quick brown fox jumps over the lazy dog";
     std::string needle   = "Jump";
