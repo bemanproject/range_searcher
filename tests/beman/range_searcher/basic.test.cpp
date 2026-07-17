@@ -236,9 +236,9 @@ TEST(RangeSearcher, Split) {
         ASSERT_EQ(result[2], (std::vector{5, 6}));
         ASSERT_EQ(result[3], (std::vector{7, 8}));
     };
-    test.operator()<branges::default_searcher<std::vector<int>>>();
-    test.operator()<branges::boyer_moore_searcher<std::vector<int>>>();
-    test.operator()<branges::boyer_moore_horspool_searcher<std::vector<int>>>();
+    test.operator()<branges::default_searcher<std::views::all_t<std::vector<int>&>>>();
+    test.operator()<branges::boyer_moore_searcher<std::views::all_t<std::vector<int>&>>>();
+    test.operator()<branges::boyer_moore_horspool_searcher<std::views::all_t<std::vector<int>&>>>();
 
     std::string              sentence = "A quick brown fox";
     std::vector<std::string> result2;
