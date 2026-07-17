@@ -128,7 +128,7 @@ class boyer_moore_searcher {
 
         while (current <= last) {
             difference_type j = pattern_length_;
-            while (pred_(std::invoke(proj_, base_[j - 1]), std::invoke(proj2, current[j - 1]))) {
+            while (std::invoke(pred_, std::invoke(proj_, base_[j - 1]), std::invoke(proj2, current[j - 1]))) {
                 --j;
                 if (j == 0)
                     return {current, current + pattern_length_};
@@ -152,10 +152,10 @@ class boyer_moore_searcher {
         std::size_t k = 0;
 
         for (std::size_t i = 1; i != count; ++i) {
-            while (k > 0 && !pred(std::invoke(proj, first[k]), std::invoke(proj, first[i])))
+            while (k > 0 && !std::invoke(pred, std::invoke(proj, first[k]), std::invoke(proj, first[i])))
                 k = prefix[k - 1];
 
-            if (pred(std::invoke(proj, first[k]), std::invoke(proj, first[i])))
+            if (std::invoke(pred, std::invoke(proj, first[k]), std::invoke(proj, first[i])))
                 ++k;
             prefix[i] = k;
         }
@@ -263,7 +263,7 @@ class boyer_moore_horspool_searcher {
 
         while (current <= last) {
             difference_type j = pattern_length_;
-            while (pred_(std::invoke(proj_, base_[j - 1]), std::invoke(proj2, current[j - 1]))) {
+            while (std::invoke(pred_, std::invoke(proj_, base_[j - 1]), std::invoke(proj2, current[j - 1]))) {
                 --j;
                 if (j == 0)
                     return {current, current + pattern_length_};

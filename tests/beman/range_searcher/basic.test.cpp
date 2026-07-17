@@ -150,6 +150,7 @@ TEST(RangeSearcher, Views) {
               24);
     ASSERT_EQ(
         branges::search(haystack, branges::default_searcher{std::views::iota('a', 'd')}).end() - haystack.begin(), 27);
+#if !defined(_LIBCPP_VERSION) || _LIBCPP_VERSION >= 180000
     ASSERT_TRUE(branges::contains_subrange(haystack, branges::boyer_moore_searcher{std::views::iota('a', 'd')}));
     ASSERT_EQ(branges::search(haystack, branges::boyer_moore_searcher{std::views::iota('a', 'd')}).begin() -
                   haystack.begin(),
@@ -165,6 +166,7 @@ TEST(RangeSearcher, Views) {
     ASSERT_EQ(branges::search(haystack, branges::boyer_moore_horspool_searcher{std::views::iota('a', 'd')}).end() -
                   haystack.begin(),
               27);
+#endif
 }
 
 TEST(RangeSearcher, Empty) {
