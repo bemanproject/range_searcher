@@ -97,6 +97,40 @@ TEST(RangeSearcher, General) {
     ASSERT_EQ(branges::search(haystack, branges::boyer_moore_horspool_searcher{"Jump"}).end(), haystack.end());
 }
 
+TEST(RangeSearcher, Accessor) {
+    std::vector vec = {1, 2, 3, 4};
+    ASSERT_TRUE(std::ranges::equal(branges::default_searcher{vec}.base(), vec));
+    ASSERT_TRUE(branges::default_searcher{vec}.pred()(1, 1));
+    ASSERT_FALSE(branges::default_searcher{vec}.pred()(1, 2));
+    ASSERT_EQ(branges::default_searcher{vec}.proj()(1), 1);
+    ASSERT_TRUE(std::ranges::equal(branges::boyer_moore_searcher{vec}.base(), vec));
+    ASSERT_TRUE(branges::boyer_moore_searcher{vec}.pred()(1, 1));
+    ASSERT_FALSE(branges::boyer_moore_searcher{vec}.pred()(1, 2));
+    ASSERT_EQ(branges::boyer_moore_searcher{vec}.proj()(1), 1);
+    ASSERT_TRUE(std::ranges::equal(branges::boyer_moore_horspool_searcher{vec}.base(), vec));
+    ASSERT_TRUE(branges::boyer_moore_horspool_searcher{vec}.pred()(1, 1));
+    ASSERT_FALSE(branges::boyer_moore_horspool_searcher{vec}.pred()(1, 2));
+    ASSERT_EQ(branges::boyer_moore_horspool_searcher{vec}.proj()(1), 1);
+
+    auto pred = [](int a, int b) { return a % 2 == b % 2; };
+    auto proj = [](int v) { return v * 3; };
+    ASSERT_TRUE(std::ranges::equal(branges::default_searcher{vec, pred, proj}.base(), vec));
+    ASSERT_TRUE((branges::default_searcher{vec, pred, proj}.pred()(1, 1)));
+    ASSERT_TRUE((branges::default_searcher{vec, pred, proj}.pred()(1, 3)));
+    ASSERT_FALSE((branges::default_searcher{vec, pred, proj}.pred()(1, 2)));
+    ASSERT_EQ((branges::default_searcher{vec, pred, proj}.proj()(1)), 3);
+    ASSERT_TRUE(std::ranges::equal(branges::boyer_moore_searcher{vec, pred, proj}.base(), vec));
+    ASSERT_TRUE((branges::boyer_moore_searcher{vec, pred, proj}.pred()(1, 1)));
+    ASSERT_TRUE((branges::boyer_moore_searcher{vec, pred, proj}.pred()(1, 3)));
+    ASSERT_FALSE((branges::boyer_moore_searcher{vec, pred, proj}.pred()(1, 2)));
+    ASSERT_EQ((branges::boyer_moore_searcher{vec, pred, proj}.proj()(1)), 3);
+    ASSERT_TRUE(std::ranges::equal(branges::boyer_moore_horspool_searcher{vec, pred, proj}.base(), vec));
+    ASSERT_TRUE((branges::boyer_moore_horspool_searcher{vec, pred, proj}.pred()(1, 1)));
+    ASSERT_TRUE((branges::boyer_moore_horspool_searcher{vec, pred, proj}.pred()(1, 3)));
+    ASSERT_FALSE((branges::boyer_moore_horspool_searcher{vec, pred, proj}.pred()(1, 2)));
+    ASSERT_EQ((branges::boyer_moore_horspool_searcher{vec, pred, proj}.proj()(1)), 3);
+}
+
 TEST(RangeSearcher, Constexpr) {
     static constexpr std::array vec  = {1, 2, 3, 4};
     static constexpr std::array vec2 = {2, 3};
@@ -223,6 +257,24 @@ TEST(RangeSearcher, Empty) {
               haystack.begin());
     ASSERT_EQ(branges::search(haystack, branges::boyer_moore_horspool_searcher{std::string{}}).end(),
               haystack.begin());
+
+    std::string haystack2 = "testing";
+    std::string needle2   = "a quick brown fox jumps over the lazy dog";
+    ASSERT_FALSE(branges::contains_subrange(haystack2, branges::default_searcher{needle2}));
+    ASSERT_EQ(branges::search(haystack2, branges::default_searcher{needle2}).begin() - haystack2.begin(),
+              haystack2.size());
+    ASSERT_EQ(branges::search(haystack2, branges::default_searcher{needle2}).end() - haystack2.begin(),
+              haystack2.size());
+    ASSERT_FALSE(branges::contains_subrange(haystack2, branges::boyer_moore_searcher{needle2}));
+    ASSERT_EQ(branges::search(haystack2, branges::boyer_moore_searcher{needle2}).begin() - haystack2.begin(),
+              haystack2.size());
+    ASSERT_EQ(branges::search(haystack2, branges::boyer_moore_searcher{needle2}).end() - haystack2.begin(),
+              haystack2.size());
+    ASSERT_FALSE(branges::contains_subrange(haystack2, branges::boyer_moore_horspool_searcher{needle2}));
+    ASSERT_EQ(branges::search(haystack2, branges::boyer_moore_horspool_searcher{needle2}).begin() - haystack2.begin(),
+              haystack2.size());
+    ASSERT_EQ(branges::search(haystack2, branges::boyer_moore_horspool_searcher{needle2}).end() - haystack2.begin(),
+              haystack2.size());
 }
 
 TEST(RangeSearcher, Split) {

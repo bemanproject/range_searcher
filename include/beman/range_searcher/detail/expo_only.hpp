@@ -12,12 +12,114 @@
     #include <functional>
     #include <iterator>
     #include <limits>
+    #include <optional>
     #include <type_traits>
     #include <unordered_map>
 
 #endif // !BEMAN_RANGE_SEARCHER_USE_MODULES()
 
 namespace beman::range_searcher::detail {
+
+// until C++23, `__movable_box` was named `__copyable_box` and required the stored type to be copy-constructible, not
+// just move-constructible; we preserve the old behavior in pre-C++23 modes.
+template <class Tp>
+concept movable_box_object =
+#if __cpp_lib_ranges >= 202207L
+    std::move_constructible<Tp>
+#else
+    std::copy_constructible<Tp>
+#endif
+    && std::is_object_v<Tp>;
+
+// Primary template - uses std::optional and introduces an empty state in case assignment fails.
+template <movable_box_object Tp>
+class movable_box {
+    [[no_unique_address]] std::optional<Tp> val_;
+
+  public:
+    template <class... Args>
+        requires std::is_constructible_v<Tp, Args...>
+    constexpr explicit movable_box(std::in_place_t,
+                                   Args&&... args) noexcept(std::is_nothrow_constructible_v<Tp, Args...>)
+        : val_(std::in_place, std::forward<Args>(args)...) {}
+
+    constexpr movable_box() noexcept(std::is_nothrow_default_constructible_v<Tp>)
+        requires std::default_initializable<Tp>
+        : val_(std::in_place) {}
+
+    movable_box(const movable_box&) = default;
+    movable_box(movable_box&&)      = default;
+
+    constexpr movable_box& operator=(const movable_box& other) noexcept(std::is_nothrow_copy_constructible_v<Tp>)
+#if __cpp_lib_ranges >= 202207L
+        requires std::copy_constructible<Tp>
+#endif
+    {
+        if (this != std::addressof(other)) {
+            if (other.has_value())
+                val_.emplace(*other);
+            else
+                val_.reset();
+        }
+        return *this;
+    }
+
+    movable_box& operator=(movable_box&&)
+        requires std::movable<Tp>
+    = default;
+
+    constexpr movable_box& operator=(movable_box&& other) noexcept(std::is_nothrow_move_constructible_v<Tp>) {
+        if (this != std::addressof(other)) {
+            if (other.has_value())
+                val_.emplace(std::move(*other));
+            else
+                val_.reset();
+        }
+        return *this;
+    }
+
+    constexpr const Tp& operator*() const noexcept { return *val_; }
+    constexpr Tp&       operator*() noexcept { return *val_; }
+
+    constexpr const Tp* operator->() const noexcept { return val_.operator->(); }
+    constexpr Tp*       operator->() noexcept { return val_.operator->(); }
+
+    [[nodiscard]] constexpr bool has_value() const noexcept { return val_.has_value(); }
+};
+
+// Workaround for MSVC bug:
+// https://developercommunity.visualstudio.com/t/std%3A%3Aoptional-with-empty-class-does-not/10655185
+template <movable_box_object Tp>
+    requires std::is_empty_v<Tp>
+class movable_box<Tp> {
+    [[no_unique_address]] Tp val_;
+    bool                     has_value_;
+
+  public:
+    template <class... Args>
+        requires std::is_constructible_v<Tp, Args...>
+    constexpr explicit movable_box(std::in_place_t,
+                                   Args&&... args) noexcept(std::is_nothrow_constructible_v<Tp, Args...>)
+        : val_(std::forward<Args>(args)...), has_value_(true) {}
+
+    constexpr movable_box() noexcept(std::is_nothrow_default_constructible_v<Tp>)
+        requires std::default_initializable<Tp>
+        : val_(), has_value_(false) {}
+
+    movable_box(const movable_box&) = default;
+    movable_box(movable_box&&)      = default;
+
+    constexpr movable_box& operator=(const movable_box& other) = default;
+    constexpr movable_box& operator=(movable_box&& other)      = default;
+
+    constexpr const Tp& operator*() const noexcept { return val_; }
+    constexpr Tp&       operator*() noexcept { return val_; }
+
+    constexpr const Tp* operator->() const noexcept { return &val_; }
+    constexpr Tp*       operator->() noexcept { return &val_; }
+
+    [[nodiscard]] constexpr bool has_value() const noexcept { return has_value_; }
+};
 
 template <std::indirectly_readable I, std::indirectly_regular_unary_invocable<I> Proj>
 using projected_value_t = std::remove_cvref_t<std::invoke_result_t<Proj&, std::iter_value_t<I>&> >;
@@ -74,12 +176,12 @@ class BMSkipTable<Key, Value, Hash, BinaryPredicate, true> {
 template <typename Hash, typename Proj>
 class hash_wrapper {
   private:
-    Hash hash_;
-    Proj proj_;
+    Hash              hash_;
+    movable_box<Proj> proj_;
 
   public:
-    hash_wrapper(const Hash& hash, const Proj& proj) : hash_(hash), proj_(proj) {}
-    std::size_t operator()(const auto& key) const { return hash_(std::invoke(proj_, key)); }
+    hash_wrapper(Hash hash, Proj proj) : hash_(std::move(hash)), proj_(std::in_place, std::move(proj)) {}
+    std::size_t operator()(const auto& key) const { return hash_(std::invoke(*proj_, key)); }
 };
 
 } // namespace beman::range_searcher::detail

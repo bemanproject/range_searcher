@@ -39,19 +39,29 @@ template <std::ranges::forward_range                                           V
 class default_searcher {
   public:
     constexpr explicit default_searcher(V base, Pred pred = {}, Proj proj = {})
-        : base_(std::move(base)), pred_(std::move(pred)), proj_(std::move(proj)) {}
+        : base_(std::move(base)), pred_(std::in_place, std::move(pred)), proj_(std::in_place, std::move(proj)) {}
+
+    constexpr V base() const&
+        requires std::copy_constructible<V>
+    {
+        return base_;
+    }
+    constexpr V base() && { return std::move(base_); }
+
+    constexpr const Pred& pred() const { return *pred_; }
+    constexpr const Proj& proj() const { return *proj_; }
 
     template <std::forward_iterator I2, std::sentinel_for<I2> S2, class Proj2 = std::identity>
         requires std::indirectly_comparable<I2, std::ranges::iterator_t<V>, Pred, Proj2, Proj>
     constexpr std::ranges::subrange<I2> operator()(I2 first, S2 last, Proj2 proj2 = {}) const {
         return std::ranges::search(
-            first, last, std::ranges::begin(base_), std::ranges::end(base_), pred_, std::move(proj2), proj_);
+            first, last, std::ranges::begin(base_), std::ranges::end(base_), *pred_, std::move(proj2), *proj_);
     }
 
   private:
-    [[no_unique_address]] V    base_; // exposition only
-    [[no_unique_address]] Pred pred_; // exposition only
-    [[no_unique_address]] Proj proj_; // exposition only
+    V                         base_; // exposition only
+    detail::movable_box<Pred> pred_; // exposition only
+    detail::movable_box<Proj> proj_; // exposition only
 };
 
 template <std::ranges::forward_range                                           R,
@@ -79,22 +89,32 @@ class boyer_moore_searcher {
   public:
     explicit boyer_moore_searcher(V base, Pred pred = {}, Proj proj = {}, Hash hf = {})
         : base_(std::move(base)),
-          pred_(std::move(pred)),
-          proj_(std::move(proj)),
+          pred_(std::in_place, std::move(pred)),
+          proj_(std::in_place, std::move(proj)),
           pattern_length_(std::ranges::distance(base)),
           skip_table_(std::make_shared<skip_table_type>(
-              pattern_length_, -1, detail::hash_wrapper<Hash, Proj>(hf, proj_), pred_)),
+              pattern_length_, -1, detail::hash_wrapper<Hash, Proj>(hf, *proj_), *pred_)),
           suffix_(std::make_shared<difference_type[]>(pattern_length_ + 1)) {
         difference_type i         = 0;
         auto            pat_first = std::ranges::begin(base);
         auto            pat_last  = std::ranges::end(base);
         while (pat_first != pat_last) {
-            skip_table_->insert(std::invoke(proj_, *pat_first), i);
+            skip_table_->insert(std::invoke(*proj_, *pat_first), i);
             ++pat_first;
             ++i;
         }
-        build_suffix_table(std::ranges::begin(base_), std::ranges::end(base_), pred_, proj_);
+        build_suffix_table(std::ranges::begin(base_), std::ranges::end(base_), *pred_, *proj_);
     }
+
+    constexpr V base() const&
+        requires std::copy_constructible<V>
+    {
+        return base_;
+    }
+    constexpr V base() && { return std::move(base_); }
+
+    constexpr const Pred& pred() const { return *pred_; }
+    constexpr const Proj& proj() const { return *proj_; }
 
     template <std::random_access_iterator I2, std::sentinel_for<I2> S2, class Proj2 = std::identity>
         requires std::indirectly_comparable<I2, std::ranges::iterator_t<V>, Pred, Proj2, Proj>
@@ -113,9 +133,9 @@ class boyer_moore_searcher {
     }
 
   private:
-    [[no_unique_address]] V            base_; // exposition only
-    [[no_unique_address]] Pred         pred_; // exposition only
-    [[no_unique_address]] Proj         proj_; // exposition only
+    V                                  base_; // exposition only
+    detail::movable_box<Pred>          pred_; // exposition only
+    detail::movable_box<Proj>          proj_; // exposition only
     difference_type                    pattern_length_;
     std::shared_ptr<skip_table_type>   skip_table_;
     std::shared_ptr<difference_type[]> suffix_;
@@ -128,7 +148,7 @@ class boyer_moore_searcher {
 
         while (current <= last) {
             difference_type j = pattern_length_;
-            while (std::invoke(pred_, std::invoke(proj_, base_[j - 1]), std::invoke(proj2, current[j - 1]))) {
+            while (std::invoke(*pred_, std::invoke(*proj_, base_[j - 1]), std::invoke(proj2, current[j - 1]))) {
                 --j;
                 if (j == 0)
                     return {current, current + pattern_length_};
@@ -214,11 +234,11 @@ class boyer_moore_horspool_searcher {
   public:
     explicit boyer_moore_horspool_searcher(V base, Pred pred = {}, Proj proj = {}, Hash hf = {})
         : base_(std::move(base)),
-          pred_(std::move(pred)),
-          proj_(std::move(proj)),
+          pred_(std::in_place, std::move(pred)),
+          proj_(std::in_place, std::move(proj)),
           pattern_length_(std::ranges::distance(base_)),
           skip_table_(std::make_shared<skip_table_type>(
-              pattern_length_, pattern_length_, detail::hash_wrapper<Hash, Proj>(hf, proj_), pred_)) {
+              pattern_length_, pattern_length_, detail::hash_wrapper<Hash, Proj>(hf, *proj_), *pred_)) {
         if (std::ranges::empty(base_))
             return;
         auto pat_first = std::ranges::begin(base_);
@@ -226,11 +246,21 @@ class boyer_moore_horspool_searcher {
         --pat_last;
         difference_type i = 0;
         while (pat_first != pat_last) {
-            skip_table_->insert(std::invoke(proj_, *pat_first), pattern_length_ - 1 - i);
+            skip_table_->insert(std::invoke(*proj_, *pat_first), pattern_length_ - 1 - i);
             ++pat_first;
             ++i;
         }
     }
+
+    constexpr V base() const&
+        requires std::copy_constructible<V>
+    {
+        return base_;
+    }
+    constexpr V base() && { return std::move(base_); }
+
+    constexpr const Pred& pred() const { return *pred_; }
+    constexpr const Proj& proj() const { return *proj_; }
 
     template <std::random_access_iterator I2, std::sentinel_for<I2> S2, class Proj2 = std::identity>
         requires std::indirectly_comparable<I2, std::ranges::iterator_t<V>, Pred, Proj2, Proj>
@@ -249,9 +279,9 @@ class boyer_moore_horspool_searcher {
     }
 
   private:
-    [[no_unique_address]] V          base_; // exposition only
-    [[no_unique_address]] Pred       pred_; // exposition only
-    [[no_unique_address]] Proj       proj_; // exposition only
+    V                                base_; // exposition only
+    detail::movable_box<Pred>        pred_; // exposition only
+    detail::movable_box<Proj>        proj_; // exposition only
     difference_type                  pattern_length_;
     std::shared_ptr<skip_table_type> skip_table_;
 
@@ -263,7 +293,7 @@ class boyer_moore_horspool_searcher {
 
         while (current <= last) {
             difference_type j = pattern_length_;
-            while (std::invoke(pred_, std::invoke(proj_, base_[j - 1]), std::invoke(proj2, current[j - 1]))) {
+            while (std::invoke(*pred_, std::invoke(*proj_, base_[j - 1]), std::invoke(proj2, current[j - 1]))) {
                 --j;
                 if (j == 0)
                     return {current, current + pattern_length_};
