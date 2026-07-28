@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 [![Compiler Explorer Example](https://img.shields.io/badge/Try%20it%20on%20Compiler%20Explorer-grey?logo=compilerexplorer&logoColor=67c52a)](https://godbolt.org/z/hG7vGW9MT)
 <!-- markdownlint-restore -->
 
-**Implements**: Range-based searchers and range overloads of `std::search` with search arguments, proposed in [Range-Based Searchers (P4205R0)](https://wg21.link/P4205R0).
+**Implements**: Range-based searchers and range overloads of `std::search` with search arguments, proposed in [Range-Based Searchers (P4205R1)](https://wg21.link/P4205R1).
 
 **Status**: [Under development and not yet ready for production use.](https://github.com/bemanproject/beman/blob/main/docs/beman_library_maturity_model.md#under-development-and-not-yet-ready-for-production-use)
 
