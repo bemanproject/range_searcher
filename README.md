@@ -82,7 +82,7 @@ This project requires at least the following to build:
 You can disable building tests by setting CMake option `BEMAN_RANGE_SEARCHER_BUILD_TESTS` to
 `OFF` when configuring the project.
 
-You can disable building examples by setting CMake option `BEMAN_SCAN_VIEW_BUILD_EXAMPLES` to
+You can disable building examples by setting CMake option `BEMAN_RANGE_SEARCHER_BUILD_EXAMPLES` to
 `OFF` when configuring the project.
 
 ### Supported Platforms
