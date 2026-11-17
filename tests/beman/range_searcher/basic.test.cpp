@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <memory>
+
 #include <beman/range_searcher/config.hpp>
 
 #include <gtest/gtest.h>
